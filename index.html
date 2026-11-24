@@ -1,0 +1,642 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GAMETIME | Champions Cup Live</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+* { box-sizing: border-box; }
+body {
+ margin: 0;
+ background: #08152e;
+ color: white;
+ font-family: Arial, sans-serif;
+}
+header {
+ padding: 30px 15px;
+ text-align: center;
+ background: #102b60;
+}
+h1 { letter-spacing: 4px; margin: 0; }
+h2 { color: #a9c7ff; }
+main { max-width: 1200px; margin: auto; padding: 15px; }
+section {
+ background: #112344;
+ padding: 18px;
+ margin-bottom: 18px;
+ border-radius: 10px;
+}
+button, input, select {
+ padding: 10px;
+ margin: 4px;
+ border-radius: 6px;
+ font-size: 15px;
+}
+button {
+ background: #2858a5;
+ color: white;
+ border: 0;
+ cursor: pointer;
+}
+button:disabled { opacity: .5; }
+input, select {
+ background: white;
+ color: #08152e;
+ border: 1px solid #aaa;
+ max-width: 100%;
+}
+.score { width: 60px; }
+table {
+ width: 100%;
+ border-collapse: collapse;
+ font-size: 14px;
+}
+th, td {
+ padding: 10px;
+ border-bottom: 1px solid #34486c;
+ text-align: center;
+}
+th { background: #203e73; }
+td:nth-child(2) { text-align: left; }
+.qualified { background: #164b3e; }
+.scroll { overflow-x: auto; }
+.fixture {
+ padding: 12px 0;
+ border-bottom: 1px solid #34486c;
+}
+.hidden { display: none; }
+#message { color: #ffda85; white-space: pre-wrap; }
+footer { text-align: center; padding: 25px; color: #a9c7ff; }
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>GAMETIME</h1>
+<p>EVO SPORTS | CHAMPIONS CUP LIVE</p>
+<p>26 Teams • 59 Matches • 1 Champion</p>
+</header>
+
+<main>
+
+<section>
+<h2>Organiser access</h2>
+<div id="login">
+<input id="email" type="email" placeholder="Email address">
+<input id="password" type="password" placeholder="Password">
+<button id="loginButton">Log in</button>
+</div>
+<button id="logoutButton" class="hidden">Log out</button>
+<p id="message"></p>
+</section>
+
+<section>
+<h2>Competition</h2>
+<select id="competition"></select>
+<div id="createPanel" class="hidden">
+<input id="competitionName" value="Champions Cup">
+<button id="createButton">Create competition</button>
+</div>
+</section>
+
+<section id="admin" class="hidden">
+<h2>Competition management</h2>
+<div id="teamEditor"></div>
+<button id="saveTeams">Save team names</button>
+<button id="drawButton">Generate random fixtures</button>
+<button id="knockoutButton">Generate quarter-finals</button>
+</section>
+
+<section>
+<h2>Live league standings</h2>
+<div class="scroll">
+<table>
+<thead>
+<tr>
+<th>Pos</th><th>Team</th><th>P</th>
+<th>W</th><th>D</th><th>L</th>
+<th>GF</th><th>GA</th><th>GD</th><th>Pts</th>
+</tr>
+</thead>
+<tbody id="standings"></tbody>
+</table>
+</div>
+<p>Top eight qualify for the quarter-finals.</p>
+</section>
+
+<section>
+<h2>League fixtures and results</h2>
+<div id="fixtures"></div>
+</section>
+
+<section>
+<h2>Knockout stages</h2>
+<div id="knockouts"></div>
+<h2 id="champion"></h2>
+</section>
+
+</main>
+
+<footer>GAMETIME | Powered by EVO Sports</footer>
+
+<script>
+
+const SUPABASE_URL = "https://wfqvjqyghsirksdtlbnl.supabase.co/rest/v1/";
+const SUPABASE_KEY = "sb_publishable__vqVglfQV29KLglZdwDbhg_81SwhBPO";
+
+const db = window.supabase.createClient(
+ SUPABASE_URL, SUPABASE_KEY
+);
+
+const el = id => document.getElementById(id);
+
+let user = null;
+let current = null;
+let teams = [];
+let matches = [];
+let busy = false;
+
+function message(text) {
+ el("message").textContent = text;
+}
+
+function check(result) {
+ if (result.error) throw result.error;
+ return result.data;
+}
+
+async function action(fn) {
+ if (busy) return;
+ busy = true;
+ try {
+  await fn();
+ } catch (error) {
+  message(error.message);
+ } finally {
+  busy = false;
+ }
+}
+
+function owner() {
+ return !!(user && current &&
+ current.owner_id === user.id);
+}
+
+function teamName(number) {
+ return teams.find(t => t.team_number === number)?.name
+ || "To be decided";
+}
+
+function complete(m) {
+ return m.home_score !== null &&
+ m.away_score !== null;
+}
+
+function standings() {
+ const rows = teams.map(t => ({
+  number: t.team_number,
+  name: t.name,
+  p:0,w:0,d:0,l:0,gf:0,ga:0,gd:0,pts:0
+ }));
+
+ const lookup = new Map(rows.map(r => [r.number,r]));
+
+ matches.filter(m =>
+  m.stage === "league" && complete(m)
+ ).forEach(m => {
+  const h = lookup.get(m.home_team);
+  const a = lookup.get(m.away_team);
+  if (!h || !a) return;
+
+  h.p++; a.p++;
+  h.gf += m.home_score;
+  h.ga += m.away_score;
+  a.gf += m.away_score;
+  a.ga += m.home_score;
+
+  if (m.home_score > m.away_score) {
+   h.w++; a.l++; h.pts += 3;
+  } else if (m.home_score < m.away_score) {
+   a.w++; h.l++; a.pts += 3;
+  } else {
+   h.d++; a.d++; h.pts++; a.pts++;
+  }
+ });
+
+ rows.forEach(r => r.gd = r.gf-r.ga);
+
+ return rows.sort((a,b) =>
+  b.pts-a.pts || b.gd-a.gd ||
+  b.gf-a.gf || b.w-a.w ||
+  a.number-b.number
+ );
+}
+
+function renderStandings() {
+ const body = el("standings");
+ body.replaceChildren();
+
+ standings().forEach((r,i) => {
+  const tr = document.createElement("tr");
+  if(i < 8) tr.className = "qualified";
+
+  [i+1,r.name,r.p,r.w,r.d,r.l,
+   r.gf,r.ga,r.gd,r.pts].forEach(value => {
+    const td = document.createElement("td");
+    td.textContent = value;
+    tr.appendChild(td);
+  });
+
+  body.appendChild(tr);
+ });
+}
+
+function renderTeams() {
+ const panel = el("teamEditor");
+ panel.replaceChildren();
+
+ teams.forEach(t => {
+  const input = document.createElement("input");
+  input.value = t.name;
+  input.id = "team-"+t.team_number;
+  panel.appendChild(input);
+ });
+}
+
+function renderMatch(m, container) {
+ const row = document.createElement("div");
+ row.className = "fixture";
+
+ const title = document.createElement("div");
+ title.textContent = "Match "+m.match_number+
+ " | "+teamName(m.home_team)+" vs "+
+ teamName(m.away_team);
+ row.appendChild(title);
+
+ if (!owner() || !m.home_team || !m.away_team) {
+  const score = document.createElement("p");
+  score.textContent = complete(m)
+   ? m.home_score+" - "+m.away_score
+   : "Awaiting result";
+  row.appendChild(score);
+ } else {
+  const h = document.createElement("input");
+  const a = document.createElement("input");
+
+  [h,a].forEach(input => {
+   input.type = "number";
+   input.min = "0";
+   input.step = "1";
+   input.className = "score";
+  });
+
+  h.value = m.home_score ?? "";
+  a.value = m.away_score ?? "";
+
+  row.append(h,document.createTextNode(" - "),a);
+
+  const save = document.createElement("button");
+  save.textContent = "Save result";
+  save.onclick = () => action(async () => {
+   if(h.value === "" || a.value === "" ||
+    !Number.isInteger(Number(h.value)) ||
+    !Number.isInteger(Number(a.value)) ||
+    Number(h.value)<0 || Number(a.value)<0) {
+    throw new Error("Enter two valid scores.");
+   }
+
+   await saveResult(m,Number(h.value),Number(a.value));
+  });
+
+  row.appendChild(save);
+ }
+
+ if(m.stage !== "league" && m.winner_team) {
+  const winner = document.createElement("p");
+  winner.textContent = "Winner: "+teamName(m.winner_team);
+  row.appendChild(winner);
+ }
+
+ container.appendChild(row);
+}
+
+function renderFixtures() {
+ const league = el("fixtures");
+ const knockout = el("knockouts");
+ league.replaceChildren();
+ knockout.replaceChildren();
+
+ for(let day=1;day<=4;day++) {
+  const heading = document.createElement("h3");
+  heading.textContent = "Matchday "+day;
+  league.appendChild(heading);
+
+  matches.filter(m =>
+   m.stage==="league" && m.matchday===day
+  ).forEach(m => renderMatch(m,league));
+ }
+
+ ["quarter-final","semi-final","final"].forEach(stage => {
+  const heading = document.createElement("h3");
+  heading.textContent = stage.toUpperCase();
+  knockout.appendChild(heading);
+
+  matches.filter(m => m.stage===stage)
+   .forEach(m => renderMatch(m,knockout));
+ });
+
+ const final = matches.find(m => m.stage==="final");
+
+ el("champion").textContent = final?.winner_team
+ ? "🏆 CHAMPION: "+teamName(final.winner_team)
+ : "";
+}
+
+function render() {
+ el("admin").classList.toggle("hidden",!owner());
+ el("createPanel").classList.toggle("hidden",!user);
+ el("login").classList.toggle("hidden",!!user);
+ el("logoutButton").classList.toggle("hidden",!user);
+
+ renderStandings();
+ renderFixtures();
+ if(owner()) renderTeams();
+
+ el("drawButton").disabled = matches.length > 0;
+ el("knockoutButton").disabled =
+  matches.filter(m=>m.stage==="league").length!==52 ||
+  matches.some(m=>m.stage==="league"&&!complete(m)) ||
+  matches.some(m=>m.stage!=="league");
+}
+
+async function loadCompetition(id) {
+ current = null;
+ teams = [];
+ matches = [];
+
+ if(id) {
+  current = check(await db.from("live_competitions")
+   .select("*").eq("id",id).single());
+
+  teams = check(await db.from("live_teams")
+   .select("*").eq("competition_id",id)
+   .order("team_number"));
+
+  matches = check(await db.from("live_fixtures")
+   .select("*").eq("competition_id",id)
+   .order("match_number"));
+ }
+
+ render();
+}
+
+async function loadCompetitions(preferred) {
+ const list = check(await db.from("live_competitions")
+  .select("*").order("created_at",{ascending:false}));
+
+ const select = el("competition");
+ select.replaceChildren();
+
+ list.forEach(c => {
+  const option = document.createElement("option");
+  option.value = c.id;
+  option.textContent = c.name;
+  select.appendChild(option);
+ });
+
+ const id = list.some(c=>c.id===preferred)
+  ? preferred : list[0]?.id;
+
+ if(id) select.value=id;
+ await loadCompetition(id);
+}
+
+el("competition").onchange = () => action(async () => {
+ await loadCompetition(el("competition").value);
+});
+
+el("loginButton").onclick = () => action(async () => {
+ const data = check(await db.auth.signInWithPassword({
+  email:el("email").value.trim(),
+  password:el("password").value
+ }));
+ user = data.user;
+ el("password").value="";
+ await loadCompetitions(current?.id);
+ message("Organiser logged in.");
+});
+
+el("logoutButton").onclick = () => action(async () => {
+ check(await db.auth.signOut());
+ user=null;
+ render();
+ message("Logged out.");
+});
+
+el("createButton").onclick = () => action(async () => {
+ if(!user) return;
+
+ const name = el("competitionName").value.trim();
+ if(!name) throw new Error("Enter a competition name.");
+
+ const c = check(await db.from("live_competitions")
+  .insert({name,owner_id:user.id})
+  .select().single());
+
+ const rows = Array.from({length:26},(_,i)=>({
+  competition_id:c.id,
+  team_number:i+1,
+  name:"Team "+String(i+1).padStart(2,"0")
+ }));
+
+ check(await db.from("live_teams").insert(rows));
+
+ await loadCompetitions(c.id);
+ message("Competition created.");
+});
+
+el("saveTeams").onclick = () => action(async () => {
+ if(!owner()) return;
+
+ const rows = teams.map(t=>({
+  ...t,
+  name:el("team-"+t.team_number).value.trim()
+ }));
+
+ if(rows.some(t=>!t.name))
+  throw new Error("All teams need a name.");
+
+ check(await db.from("live_teams").upsert(rows));
+
+ await loadCompetition(current.id);
+ message("Team names saved.");
+});
+
+function shuffle(array) {
+ for(let i=array.length-1;i>0;i--) {
+  const j=Math.floor(Math.random()*(i+1));
+  [array[i],array[j]]=[array[j],array[i]];
+ }
+ return array;
+}
+
+el("drawButton").onclick = () => action(async () => {
+ if(!owner() || matches.length) return;
+ if(teams.length!==26)
+  throw new Error("Exactly 26 teams are required.");
+
+ const rotation = shuffle(teams.map(t=>t.team_number));
+ const rounds = [];
+
+ for(let round=0;round<25;round++) {
+  const pairs=[];
+  for(let i=0;i<13;i++) {
+   pairs.push([rotation[i],rotation[25-i]]);
+  }
+  rounds.push(pairs);
+  rotation.splice(1,0,rotation.pop());
+ }
+
+ const selected = shuffle(rounds).slice(0,4);
+ const rows=[];
+ let number=1;
+
+ selected.forEach((pairs,day)=>{
+  shuffle(pairs).forEach(pair=>{
+   if(Math.random()<0.5) pair.reverse();
+
+   rows.push({
+    competition_id:current.id,
+    match_number:number++,
+    matchday:day+1,
+    stage:"league",
+    home_team:pair[0],
+    away_team:pair[1]
+   });
+  });
+ });
+
+ check(await db.from("live_fixtures").insert(rows));
+ await loadCompetition(current.id);
+ message("52 randomised fixtures generated.");
+});
+
+el("knockoutButton").onclick = () => action(async () => {
+ if(!owner()) return;
+
+ const league=matches.filter(m=>m.stage==="league");
+ if(league.length!==52 || league.some(m=>!complete(m)))
+  throw new Error("Complete all league results first.");
+
+ if(matches.some(m=>m.stage!=="league")) return;
+
+ const r=standings();
+ const seeds=[[0,7],[3,4],[1,6],[2,5]];
+
+ const rows=seeds.map((s,i)=>({
+  competition_id:current.id,
+  match_number:53+i,
+  stage:"quarter-final",
+  home_team:r[s[0]].number,
+  away_team:r[s[1]].number
+ }));
+
+ for(let i=57;i<=59;i++) {
+  rows.push({
+   competition_id:current.id,
+   match_number:i,
+   stage:i===59?"final":"semi-final",
+   home_team:null,
+   away_team:null
+  });
+ }
+
+ check(await db.from("live_fixtures").insert(rows));
+ await loadCompetition(current.id);
+ message("Knockout stages generated.");
+});
+
+async function saveResult(m,h,a) {
+ if(!owner()) return;
+
+ if(m.stage==="league" &&
+ matches.some(x=>x.stage!=="league")) {
+  throw new Error("League results are locked after knockout generation.");
+ }
+
+ let winner=null;
+
+ if(m.stage!=="league") {
+  if(h>a) winner=m.home_team;
+  else if(a>h) winner=m.away_team;
+  else {
+   const answer=prompt(
+    "Penalty shootout winner: enter 1 for "+
+    teamName(m.home_team)+" or 2 for "+
+    teamName(m.away_team)
+   );
+
+   if(answer!=="1" && answer!=="2") return;
+   winner=answer==="1"?m.home_team:m.away_team;
+  }
+
+  if(m.winner_team && m.winner_team!==winner)
+   throw new Error("Changing a confirmed knockout winner is disabled.");
+ }
+
+ check(await db.from("live_fixtures").update({
+  home_score:h,away_score:a,winner_team:winner
+ }).eq("id",m.id));
+
+ await loadCompetition(current.id);
+ await advanceKnockouts();
+ await loadCompetition(current.id);
+ message("Result saved.");
+}
+
+async function advanceKnockouts() {
+ const get=n=>matches.find(m=>m.match_number===n);
+
+ for(const [target,first,second] of [
+  [57,53,54],[58,55,56],[59,57,58]
+ ]) {
+  const next=get(target);
+  const home=get(first)?.winner_team;
+  const away=get(second)?.winner_team;
+
+  if(next && home && away &&
+   !next.home_team && !next.away_team) {
+   check(await db.from("live_fixtures").update({
+    home_team:home,away_team:away
+   }).eq("id",next.id));
+  }
+ }
+}
+
+async function start() {
+ try {
+  const session=check(await db.auth.getSession());
+  user=session.session?.user || null;
+  await loadCompetitions();
+
+  setInterval(()=>{
+   if(!busy && !user) {
+    action(()=>loadCompetitions(current?.id));
+   }
+  },10000);
+
+ } catch(error) {
+  message(error.message);
+ }
+}
+
+start();
+
+</script>
+</body>
+</html>
