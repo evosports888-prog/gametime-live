@@ -90,9 +90,19 @@ footer { text-align: center; padding: 25px; color: #a9c7ff; }
 <input id="email" type="email" placeholder="Email address">
 <input id="password" type="password" placeholder="Password">
 <button id="loginButton">Log in</button>
+<button id="forgotButton">Forgot password?</button>
 </div>
+
+<div id="resetPanel" class="hidden">
+<h3>Reset your password</h3>
+<input id="newPassword" type="password" placeholder="New password">
+<input id="confirmPassword" type="password" placeholder="Confirm new password">
+<button id="resetButton">Save new password</button>
+</div>
+
 <button id="logoutButton" class="hidden">Log out</button>
 <p id="message"></p>
+
 </section>
 
 <section>
@@ -358,10 +368,12 @@ function renderFixtures() {
 }
 
 function render() {
- el("admin").classList.toggle("hidden",!owner());
- el("createPanel").classList.toggle("hidden",!user);
- el("login").classList.toggle("hidden",!!user);
- el("logoutButton").classList.toggle("hidden",!user);
+el("admin").classList.toggle("hidden",!owner() || recoveringPassword);
+el("createPanel").classList.toggle("hidden",!user || recoveringPassword);
+el("login").classList.toggle("hidden",!!user || recoveringPassword);
+el("logoutButton").classList.toggle("hidden",!user || recoveringPassword);
+el("resetPanel").classList.toggle("hidden",!recoveringPassword);
+
 
  renderStandings();
  renderFixtures();
@@ -418,6 +430,70 @@ async function loadCompetitions(preferred) {
 
 el("competition").onchange = () => action(async () => {
  await loadCompetition(el("competition").value);
+});
+ let recoveringPassword = false;
+
+db.auth.onAuthStateChange((event, session) => {
+if (event === "PASSWORD_RECOVERY") {
+recoveringPassword = true;
+user = null;
+
+el("login").classList.add("hidden");
+el("logoutButton").classList.add("hidden");
+el("createPanel").classList.add("hidden");
+el("admin").classList.add("hidden");
+el("resetPanel").classList.remove("hidden");
+
+message("Please enter your new password.");
+}
+});
+
+el("resetButton").onclick = () => action(async () => {
+if (!recoveringPassword) {
+throw new Error("Please open a valid password recovery link.");
+}
+
+const password = el("newPassword").value;
+const confirm = el("confirmPassword").value;
+
+if (password.length < 8) {
+throw new Error("Password must contain at least 8 characters.");
+}
+
+if (password !== confirm) {
+throw new Error("Passwords do not match.");
+}
+
+check(await db.auth.updateUser({
+password: password
+}));
+
+check(await db.auth.signOut());
+
+recoveringPassword = false;
+user = null;
+
+el("newPassword").value = "";
+el("confirmPassword").value = "";
+el("resetPanel").classList.add("hidden");
+
+render();
+
+message("Password successfully changed. Please log in with your new password.");
+});
+
+el("forgotButton").onclick = () => action(async () => {
+const email = el("email").value.trim();
+
+if (!email) {
+throw new Error("Enter your email address first.");
+}
+
+check(await db.auth.resetPasswordForEmail(email, {
+redirectTo: window.location.origin
+}));
+
+message("Password recovery email sent. Please check your inbox.");
 });
 
 el("loginButton").onclick = () => action(async () => {
@@ -619,10 +695,19 @@ async function advanceKnockouts() {
 }
 
 async function start() {
- try {
-  const session=check(await db.auth.getSession());
-  user=session.session?.user || null;
-  await loadCompetitions();
+try {
+const session=check(await db.auth.getSession());
+
+user = recoveringPassword
+? null
+: session.session?.user || null;
+
+await loadCompetitions();
+
+if (recoveringPassword) {
+message("Please enter your new password.");
+}
+
 
   setInterval(()=>{
    if(!busy && !user) {
