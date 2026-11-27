@@ -1,5 +1,5 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GAMETIME | EVO Sports</title><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style> *{box-sizing:border-box}body{margin:0;background:#08152e;color:white;font:15px Arial,sans-serif}header,footer{text-align:center;padding:24px;background:#102b60}main{max-width:1200px;margin:auto;padding:15px}section{background:#112344;padding:18px;margin-bottom:16px;border-radius:10px}h2,h3{color:#a9c7ff}input,select,button{padding:10px;margin:4px;border-radius:6px;font:inherit;max-width:100%}button{background:#2858a5;color:white;border:0;cursor:pointer}button:disabled{opacity:.5}label{display:block;margin-top:8px}.hidden{display:none}.scroll{overflow:auto}table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid #34486c;text-align:center}.qualified{background:#164b3e}.fixture{padding:10px;border-bottom:1px solid #34486c}.score{width:65px}#message{color:#ffda85;white-space:pre-wrap;position:sticky;top:0;background:#112344;z-index:2} </style></head><body><header><h1>GAMETIME</h1><p>EVO SPORTS | TOURNAMENT LIVE</p></header><main><p id="message" role="status"></p><section><h2>Organiser access</h2><div id="login"><input id="email" type="email" placeholder="Email"><input id="password" type="password" placeholder="Password"><button id="loginButton">Log in</button><button id="forgotButton">Forgot password?</button></div><div id="resetPanel" class="hidden"><input id="newPassword" type="password" placeholder="New password"><input id="confirmPassword" type="password" placeholder="Confirm password"><button id="resetButton">Save new password</button></div><button id="logoutButton" class="hidden">Log out</button></section><section><h2>Competition</h2><select id="competition"></select><p id="summary"></p><div id="createPanel" class="hidden"><h3>Create competition</h3><label>Name <input id="competitionName" value="Champions Cup"></label><label>Format <select id="format"><option value="champions_league">Champions League</option><option value="groups">Groups and knockouts</option><option value="round_robin">Round-robin league</option><option value="knockout">Straight knockout</option></select></label><label>Teams <input id="teamCount" type="number" min="4" max="64" value="26"></label><label id="gamesLabel">Matches per team <input id="games" type="number" min="1" value="4"></label><label id="qualLabel">Knockout qualifiers <select id="qualifiers"><option>2</option><option>4</option><option selected>8</option><option>16</option><option>32</option><option>64</option></select></label><label id="groupLabel">Groups <input id="groups" type="number" min="2" value="2"></label><label id="perLabel">Qualifiers per group <input id="perGroup" type="number" min="1" value="2"></label><label id="doubleLabel"><input id="double" type="checkbox"> Double round-robin</label><label><input id="public" type="checkbox"> Public competition (leave unchecked for testing)</label><button id="createButton">Create competition</button></div></section><section id="admin" class="hidden"><h2>Competition management</h2><div id="teamEditor"></div><button id="saveTeams">Save team names</button><button id="drawButton">Generate fixtures</button><button id="knockoutButton">Generate knockout stages</button></section><section id="tableSection"><h2>Live standings</h2><div id="standings"></div></section><section id="leagueSection"><h2>League fixtures and results</h2><div id="fixtures"></div></section><section><h2>Knockout stages</h2><div id="knockouts"></div><h2 id="champion"></h2></section></main><footer>GAMETIME | Powered by EVO Sports</footer><script>
-const SUPABASE_URL = "https://wfqvjqyghsirksdtlbnl.supabase.co";
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GAMETIME | EVO Sports</title><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style> *{box-sizing:border-box}body{margin:0;background:#08152e;color:white;font:15px Arial,sans-serif}header,footer{text-align:center;padding:24px;background:#102b60}main{max-width:1200px;margin:auto;padding:15px}section{background:#112344;padding:18px;margin-bottom:16px;border-radius:10px}h2,h3{color:#a9c7ff}input,select,button{padding:10px;margin:4px;border-radius:6px;font:inherit;max-width:100%}button{background:#2858a5;color:white;border:0;cursor:pointer}button:disabled{opacity:.5}label{display:block;margin-top:8px}.hidden{display:none}.scroll{overflow:auto}table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid #34486c;text-align:center}.qualified{background:#164b3e}.fixture{padding:10px;border-bottom:1px solid #34486c}.score{width:65px}#message{color:#ffda85;white-space:pre-wrap;position:sticky;top:0;background:#112344;z-index:2} .management-grid{display:flex;flex-wrap:wrap;gap:6px}.danger{background:#802b36}.warning{color:#ffda85}.settings-box{border:1px solid #34486c;padding:12px;margin:12px 0;border-radius:8px}.settings-box input[type=number]{width:85px}</style></head><body><header><h1>GAMETIME</h1><p>EVO SPORTS | TOURNAMENT LIVE</p></header><main><p id="message" role="status"></p><section><h2>Organiser access</h2><div id="login"><input id="email" type="email" placeholder="Email"><input id="password" type="password" placeholder="Password"><button id="loginButton">Log in</button><button id="forgotButton">Forgot password?</button></div><div id="resetPanel" class="hidden"><input id="newPassword" type="password" placeholder="New password"><input id="confirmPassword" type="password" placeholder="Confirm password"><button id="resetButton">Save new password</button></div><button id="logoutButton" class="hidden">Log out</button></section><section><h2>Competition</h2><label><input type="checkbox" id="showArchived"> Show archived competitions</label><select id="competition"></select><p id="summary"></p><div id="createPanel" class="hidden"><h3>Create competition</h3><label>Name <input id="competitionName" value="Champions Cup"></label><label>Format <select id="format"><option value="champions_league">Champions League</option><option value="groups">Groups and knockouts</option><option value="round_robin">Round-robin league</option><option value="knockout">Straight knockout</option></select></label><label>Teams <input id="teamCount" type="number" min="4" max="64" value="26"></label><label id="gamesLabel">Matches per team <input id="games" type="number" min="1" value="4"></label><label id="qualLabel">Knockout qualifiers <select id="qualifiers"><option>2</option><option>4</option><option selected>8</option><option>16</option><option>32</option><option>64</option></select></label><label id="groupLabel">Groups <input id="groups" type="number" min="2" value="2"></label><label id="perLabel">Qualifiers per group <input id="perGroup" type="number" min="1" value="2"></label><label id="doubleLabel"><input id="double" type="checkbox"> Double round-robin</label><label><input id="public" type="checkbox"> Public competition (leave unchecked for testing)</label><label><input type="checkbox" id="customCreate"> Configure custom ranking (private preview)</label><div id="createRules"></div><button id="createButton">Create competition</button></div></section><section id="admin" class="hidden"><h2>Competition management</h2><div id="managementTools"></div><div id="teamEditor"></div><button id="saveTeams">Save team names</button><button id="drawButton">Generate fixtures</button><button id="knockoutButton">Generate knockout stages</button></section><section id="tableSection"><h2>Live standings</h2><div id="standings"></div></section><section id="leagueSection"><h2>League fixtures and results</h2><div id="fixtures"></div></section><section><h2>Knockout stages</h2><div id="knockouts"></div><h2 id="champion"></h2></section></main><footer>GAMETIME | Powered by EVO Sports</footer><script>
+const SUPABASE_URL = "YOUR_SUPABASE_URL";
 const SUPABASE_KEY = "sb_publishable__vqVglfQV29KLglZdwDbhg_81SwhBPO";
 const el=id=>document.getElementById(id); const message=t=>el('message').textContent=t;
 let db,user=null,current=null,teams=[],matches=[],busy=false,recovering=false;
@@ -12,262 +12,51 @@ function ranking(group){let rows=teams.filter(t=>group==null||t.group_name===gro
 function node(tag,text,parent){let e=document.createElement(tag);if(text!=null)e.textContent=text;if(parent)parent.append(e);return e}
 function groupNames(){return [...new Set(teams.map(t=>t.group_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}))}
 function renderStandings(){let root=el('standings');root.replaceChildren();for(let group of fmt()==='groups'?groupNames():[null]){if(group)node('h3',group,root);let wrap=node('div',null,root);wrap.className='scroll';let table=node('table',null,wrap),head=node('tr',null,table);for(let h of ['Pos','Team','P','W','D','L','GF','GA','GD','Pts'])node('th',h,head);ranking(group).forEach((r,i)=>{let tr=node('tr',null,table);if(i<(fmt()==='groups'?current.qualifiers_per_group:fmt()==='champions_league'?current.qualifiers:0))tr.className='qualified';for(let v of [i+1,name(r.n),r.p,r.w,r.d,r.l,r.gf,r.ga,r.gf-r.ga,r.pts])node('td',v,tr)})}}
-function renderMatch(m,root){let row=node('div',null,root);row.className='fixture';node('div',`Match ${m.match_number} | ${name(m.home_team)} vs ${name(m.away_team)}`,row);if(m.is_bye)node('p','Bye — automatic progression',row);else if(owner()&&m.home_team&&m.away_team&&!(m.stage==='league'&&matches.some(x=>x.stage!=='league'))){let h=node('input',null,row),a=node('input',null,row);for(let x of [h,a]){x.type='number';x.min=0;x.step=1;x.className='score'}h.value=m.home_score??'';a.value=m.away_score??'';let b=node('button','Save result',row);b.onclick=()=>action(async()=>{let x=Number(h.value),y=Number(a.value);if(h.value===''||a.value===''||!Number.isInteger(x)||!Number.isInteger(y)||x<0||y<0)throw Error('Enter valid scores');await saveResult(m,x,y)})}else node('p',complete(m)?`${m.home_score} – ${m.away_score}`:'Awaiting result',row);if(m.winner_team)node('p','Winner: '+name(m.winner_team),row)}
-function render(){for(let [id,hide] of [['admin',!owner()],['createPanel',!user||recovering],['login',!!user||recovering],['logoutButton',!user||recovering],['resetPanel',!recovering],['tableSection',fmt()==='knockout'],['leagueSection',fmt()==='knockout']])el(id).classList.toggle('hidden',hide);el('summary').textContent=current?`${current.name} | ${current.team_count} teams | ${matches.filter(m=>!m.is_bye).length} fixtures | ${current.is_public?'Public':'Private'}`:'';renderStandings();let editor=el('teamEditor');editor.replaceChildren();if(owner())for(let t of teams){let l=node('label',`${t.team_number}${t.group_name?' · '+t.group_name:''} `,editor);let i=node('input',null,l);i.id='team-'+t.team_number;i.value=t.name}let league=el('fixtures'),ko=el('knockouts');league.replaceChildren();ko.replaceChildren();let last='';for(let m of matches.filter(m=>m.stage==='league').sort((a,b)=>a.matchday-b.matchday||a.match_number-b.match_number)){let title='Matchday '+m.matchday;if(title!==last){node('h3',title,league);last=title}renderMatch(m,league)}last='';for(let m of matches.filter(m=>m.stage!=='league')){if(m.stage!==last){node('h3',m.stage.toUpperCase(),ko);last=m.stage}renderMatch(m,ko)}let final=matches.find(m=>m.stage==='final');el('champion').textContent=final?.winner_team?'🏆 CHAMPION: '+name(final.winner_team):fmt()==='round_robin'&&matches.length&&matches.every(complete)?'League winner: '+name(ranking()[0].n):'';el('drawButton').disabled=!owner()||!!matches.length;el('knockoutButton').disabled=!owner()||!['groups','champions_league'].includes(fmt())||!matches.length||matches.some(m=>m.stage!=='league'||!complete(m));}
+function renderMatch(m,root){let row=node('div',null,root);row.className='fixture';node('div',`Match ${m.match_number} | ${name(m.home_team)} vs ${name(m.away_team)}`,row);if(m.is_bye)node('p','Bye — automatic progression',row);else if(playable()&&m.home_team&&m.away_team&&!(m.stage==='league'&&matches.some(x=>x.stage!=='league'))){let h=node('input',null,row),a=node('input',null,row);for(let x of [h,a]){x.type='number';x.min=0;x.step=1;x.className='score'}h.value=m.home_score??'';a.value=m.away_score??'';let b=node('button','Save result',row);b.onclick=()=>action(async()=>{let x=Number(h.value),y=Number(a.value);if(h.value===''||a.value===''||!Number.isInteger(x)||!Number.isInteger(y)||x<0||y<0)throw Error('Enter valid scores');await saveResult(m,x,y)})}else node('p',complete(m)?`${m.home_score} – ${m.away_score}`:'Awaiting result',row);if(m.winner_team)node('p','Winner: '+name(m.winner_team),row)}
+function renderBase(){for(let [id,hide] of [['admin',!owner()],['createPanel',!user||recovering],['login',!!user||recovering],['logoutButton',!user||recovering],['resetPanel',!recovering],['tableSection',fmt()==='knockout'],['leagueSection',fmt()==='knockout']])el(id).classList.toggle('hidden',hide);el('summary').textContent=current?`${current.name} | ${current.team_count} teams | ${matches.filter(m=>!m.is_bye).length} fixtures | ${current.is_public?'Public':'Private'}`:'';renderStandings();let editor=el('teamEditor');editor.replaceChildren();if(owner())for(let t of teams){let l=node('label',`${t.team_number}${t.group_name?' · '+t.group_name:''} `,editor);let i=node('input',null,l);i.id='team-'+t.team_number;i.value=t.name}let league=el('fixtures'),ko=el('knockouts');league.replaceChildren();ko.replaceChildren();let last='';for(let m of matches.filter(m=>m.stage==='league').sort((a,b)=>a.matchday-b.matchday||a.match_number-b.match_number)){let title='Matchday '+m.matchday;if(title!==last){node('h3',title,league);last=title}renderMatch(m,league)}last='';for(let m of matches.filter(m=>m.stage!=='league')){if(m.stage!==last){node('h3',m.stage.toUpperCase(),ko);last=m.stage}renderMatch(m,ko)}let final=matches.find(m=>m.stage==='final');el('champion').textContent=final?.winner_team?'🏆 CHAMPION: '+name(final.winner_team):fmt()==='round_robin'&&matches.length&&matches.every(complete)?'League winner: '+name(ranking()[0].n):'';el('drawButton').disabled=!owner()||!!matches.length;el('knockoutButton').disabled=!owner()||!['groups','champions_league'].includes(fmt())||!matches.length||matches.some(m=>m.stage!=='league'||!complete(m));}
 async function pages(table,filter,order){let all=[];for(let i=0;;i+=500){let q=db.from(table).select('*');if(filter)q=q.eq('competition_id',filter);let part=check(await q.order(order).range(i,i+499));all.push(...part);if(part.length<500)return all}}
-let loadVersion = 0;
-
-async function load(id) {
-    const version = ++loadVersion;
-
-    let nextCurrent = null;
-    let nextTeams = [];
-    let nextMatches = [];
-
-    if (id) {
-        nextCurrent = check(await db
-            .from('live_competitions')
-            .select('*')
-            .eq('id', id)
-            .single());
-
-        nextTeams = await pages(
-            'live_teams', id, 'team_number'
-        );
-
-        nextMatches = await pages(
-            'live_fixtures', id, 'match_number'
-        );
-    }
-
-    if (version !== loadVersion) return;
-
-    current = nextCurrent;
-    teams = nextTeams;
-
-    matches = [...new Map(
-        nextMatches.map(m => [m.id, m])
-    ).values()].sort(
-        (a, b) => a.match_number - b.match_number
-    );
-
-    render();
-}async function list(preferred){let rows=await pages('live_competitions',null,'created_at');rows.reverse();let s=el('competition');s.replaceChildren();for(let c of rows){let o=node('option',c.name+(c.is_public?'':' (Private)'),s);o.value=c.id}let id=rows.some(c=>c.id===preferred)?preferred:rows[0]?.id;if(id)s.value=id;await load(id)}
+async function load(id){current=null;teams=[];matches=[];if(id){current=check(await db.from('live_competitions').select('*').eq('id',id).single());teams=await pages('live_teams',id,'team_number');matches=await pages('live_fixtures',id,'match_number')}render()}
 function fields(){let f=el('format').value;for(let [id,show] of [['gamesLabel',f==='champions_league'],['qualLabel',f==='champions_league'],['groupLabel',f==='groups'],['perLabel',f==='groups'],['doubleLabel',f==='round_robin']])el(id).classList.toggle('hidden',!show)}el('format').onchange=fields;fields();
 function bracket(ids,start){let size=2**Math.ceil(Math.log2(ids.length)),order=[1,2];while(order.length<size){let s=order.length*2+1;order=order.flatMap(x=>[x,s-x])}let slots=order.map(i=>ids[i-1]??null),rows=[],previous=[],num=start;for(let r=1;slots.length>1||previous.length>1;r++){let count=r===1?slots.length/2:previous.length/2,next=[];for(let i=0;i<count;i++){let h=r===1?slots[i*2]:null,a=r===1?slots[i*2+1]:null,bye=r===1&&(!h||!a);let stage=count===1?'final':count===2?'semi-final':count===4?'quarter-final':'round-of-'+count*2;let m={competition_id:current.id,match_number:num++,stage,knockout_round:r,home_team:h,away_team:a,home_source_match:r===1?null:previous[i*2],away_source_match:r===1?null:previous[i*2+1],is_bye:bye,winner_team:bye?h||a:null};rows.push(m);next.push(m.match_number)}previous=next;slots=[]}return rows}
 async function insertFixtures(rows){check(await db.from('live_fixtures').insert(rows))}
-async function advance() {
-    if (!owner()) return;
-
-    let map = new Map(
-        matches.map(m => [m.match_number, m])
-    );
-
-    for (let m of matches.filter(m => m.stage !== 'league')) {
-        let sources = [
-            m.home_source_match,
-            m.away_source_match
-        ];
-
-        if (!sources[0] && !sources[1] &&
-            current.team_count === 26 &&
-            current.qualifiers === 8) {
-            sources = ({
-                57: [53, 54],
-                58: [55, 56],
-                59: [57, 58]
-            })[m.match_number] || sources;
-        }
-
-        let h = map.get(sources[0])?.winner_team;
-        let a = map.get(sources[1])?.winner_team;
-
-        let updates = {};
-
-        if (h && m.home_team == null) {
-            updates.home_team = h;
-        }
-
-        if (a && m.away_team == null) {
-            updates.away_team = a;
-        }
-
-        if (Object.keys(updates).length) {
-            check(await db.from('live_fixtures')
-                .update(updates)
-                .eq('id', m.id));
-
-            Object.assign(m, updates);
-}
-}
-}
-async function saveResult(m,h,a) {
-    if (!owner()) return;
-
-    if (!Number.isInteger(h) ||
-        !Number.isInteger(a) ||
-        h < 0 || a < 0) {
-        throw Error('Enter valid scores');
-    }
-
-    let id = current.id;
-    let w = null;
-
-    // League results retain existing behaviour.
-    if (m.stage === 'league') {
-        if (matches.some(x => x.stage !== 'league')) {
-            throw Error('League results are locked');
-        }
-
-        check(await db.from('live_fixtures')
-            .update({
-                home_score: h,
-                away_score: a,
-                winner_team: null
-            })
-            .eq('id', m.id)
-            .eq('competition_id', id));
-
-        await load(id);
-        message('Result saved');
-        return;
-    }
-
-    // Validate knockout participants.
-    if (m.is_bye || !m.home_team || !m.away_team) {
-        throw Error('Invalid knockout fixture');
-    }
-
-    // Determine the winning team.
-    if (h === a) {
-        let p = prompt(
-            'Penalty winner:\n1 for ' +
-            name(m.home_team) +
-            '\n2 for ' +
-            name(m.away_team)
-        );
-
-        if (!['1', '2'].includes(p)) return;
-
-        w = p === '1' ? m.home_team : m.away_team;
-    } else {
-        w = h > a ? m.home_team : m.away_team;
-    }
-
-    // Preserve legacy knockout compatibility.
-    const legacy = matches.some(
-        x => x.stage !== 'league' &&
-        x.knockout_round == null
-    );
-
-    if (legacy) {
-        if (m.winner_team && m.winner_team !== w) {
-            throw Error(
-                'Changing legacy knockout winners is disabled'
-            );
-        }
-
-        check(await db.from('live_fixtures')
-            .update({
-                home_score: h,
-                away_score: a,
-                winner_team: w
-            })
-            .eq('id', m.id)
-            .eq('competition_id', id));
-
-        await load(id);
-        await advance();
-        await load(id);
-        message('Result saved');
-        return;
-    }
-
-    // Confirm changes to an existing winner.
-    if (m.winner_team && m.winner_team !== w) {
-        const confirmed = confirm(
-            'Change confirmed winner?\n\n' +
-            'Match ' + m.match_number + '\n' +
-            'Previous winner: ' +
-            name(m.winner_team) + '\n' +
-            'New winner: ' + name(w) + '\n\n' +
-            'Subsequent knockout fixtures may change.'
-        );
-
-        if (!confirmed) {
-            await load(id);
-            message('Correction cancelled');
-            return;
-        }
-    }
-
-    // Prepare secure database function parameters.
-    const params = {
-        p_competition_id: id,
-        p_fixture_id: m.id,
-        p_home_score: h,
-        p_away_score: a,
-        p_winner_team: w,
-        p_expected_home_score: m.home_score ?? null,
-        p_expected_away_score: m.away_score ?? null,
-        p_expected_winner: m.winner_team ?? null,
-        p_expected_home_team: m.home_team,
-        p_expected_away_team: m.away_team,
-        p_confirm_reset: false
-    };
-
-    // Attempt atomic result update.
-    let result = await db.rpc(
-        'save_knockout_result',
-        params
-    );
-
-    // Request additional confirmation if played
-    // downstream fixtures must be reset.
-    if (result.error &&
-        result.error.message.includes(
-            'Confirmation required: downstream results will be reset'
-        )) {
-
-        const confirmed = confirm(
-            'WARNING: Downstream results will be reset.\n\n' +
-            'Changing this winner will invalidate ' +
-            'one or more subsequent knockout results.\n\n' +
-            'Affected scores and winners will be cleared. ' +
-            'Unaffected fixtures will be preserved.\n\n' +
-            'Do you wish to continue?'
-        );
-
-        if (!confirmed) {
-            await load(id);
-            message('Correction cancelled. Results unchanged.');
-            return;
-        }
-
-        params.p_confirm_reset = true;
-
-        result = await db.rpc(
-            'save_knockout_result',
-            params
-        );
-    }
-
-    const saved = check(result);
-
-    await load(id);
-
-    message(
-        'Result saved successfully.\n' +
-        'Updated downstream fixtures: ' +
-        saved.updated_fixtures + '\n' +
-        'Reset downstream results: ' +
-        saved.reset_results
-    );
-}
+async function advance(){let map=new Map(matches.map(m=>[m.match_number,m]));for(let m of matches.filter(m=>m.stage!=='league')){let sources=[m.home_source_match,m.away_source_match];if(!sources[0]&&!sources[1]&&current.team_count===26&&current.qualifiers===8){sources=({57:[53,54],58:[55,56],59:[57,58]})[m.match_number]||sources}let h=map.get(sources[0])?.winner_team,a=map.get(sources[1])?.winner_team;if(h&&a&&!m.home_team&&!m.away_team){check(await db.from('live_fixtures').update({home_team:h,away_team:a}).eq('id',m.id));m.home_team=h;m.away_team=a}}}
 function wire(){el('competition').onchange=()=>action(()=>load(el('competition').value));el('loginButton').onclick=()=>action(async()=>{user=check(await db.auth.signInWithPassword({email:el('email').value.trim(),password:el('password').value})).user;el('password').value='';await list(current?.id);message('Logged in')});el('logoutButton').onclick=()=>action(async()=>{check(await db.auth.signOut());user=null;await list(current?.id);message('Logged out')});el('forgotButton').onclick=()=>action(async()=>{if(!el('email').value.trim())throw Error('Enter email first');check(await db.auth.resetPasswordForEmail(el('email').value.trim(),{redirectTo:location.origin}));message('Recovery email sent')});el('resetButton').onclick=()=>action(async()=>{if(!recovering)throw Error('Open a valid recovery link');let p=el('newPassword').value;if(p.length<8||p!==el('confirmPassword').value)throw Error('Passwords must match and contain at least 8 characters');check(await db.auth.updateUser({password:p}));check(await db.auth.signOut());recovering=false;user=null;await list();message('Password changed. Log in again')});
-el('createButton').onclick=()=>action(async()=>{if(!user||recovering)return;let name=el('competitionName').value.trim(),n=Number(el('teamCount').value),f=el('format').value,g=Number(el('games').value),q=Number(el('qualifiers').value),groups=Number(el('groups').value),per=Number(el('perGroup').value);if(!name||!Number.isInteger(n)||n<4||n>64)throw Error('Enter name and 4–64 teams');if(f==='champions_league'&&(!Number.isInteger(g)||g<1||g>=n||n*g%2||!power(q)||q>n))throw Error('Invalid matches or qualifiers; odd team counts require even matches per team');if(f==='groups'&&(!Number.isInteger(groups)||groups<2||!Number.isInteger(per)||per<1||Math.floor(n/groups)<Math.max(2,per)||!power(groups*per)))throw Error('Groups need at least two teams each and total qualifiers must be a power of two');let c=check(await db.from('live_competitions').insert({name,owner_id:user.id,team_count:n,format:f,games_per_team:f==='champions_league'?g:f==='round_robin'?(n-1)*(el('double').checked?2:1):0,qualifiers:f==='groups'?groups*per:f==='champions_league'?q:f==='knockout'?n:0,group_count:f==='groups'?groups:null,qualifiers_per_group:f==='groups'?per:null,double_round_robin:f==='round_robin'&&el('double').checked,is_public:el('public').checked}).select().single());try{check(await db.from('live_teams').insert(Array.from({length:n},(_,i)=>({competition_id:c.id,team_number:i+1,name:'Team '+String(i+1).padStart(2,'0')}))))}catch(e){await db.from('live_competitions').delete().eq('id',c.id);throw e}await list(c.id);message('Competition created')});
-el('saveTeams').onclick=()=>action(async()=>{if(!owner())return;let rows=teams.map(t=>({...t,name:el('team-'+t.team_number).value.trim()}));if(rows.some(t=>!t.name))throw Error('All teams need names');check(await db.from('live_teams').upsert(rows));await load(current.id);message('Team names saved')});
-el('drawButton').onclick=()=>action(async()=>{if(!owner()||matches.length)return;if(teams.length!==current.team_count)throw Error('Team count mismatch');let ids=teams.map(t=>t.team_number),rows=[],number=1;let add=(rs,group=null)=>rs.forEach((pairs,i)=>pairs.forEach(([h,a])=>rows.push({competition_id:current.id,match_number:number++,matchday:i+1,stage:'league',home_team:h,away_team:a,group_name:group})));if(fmt()==='knockout')rows=bracket(shuffle(ids),1);else if(fmt()==='champions_league')add(leagueDraw(ids,current.games_per_team));else if(fmt()==='round_robin'){let r=rounds(shuffle(ids));if(current.double_round_robin)r=r.concat(r.map(p=>p.map(([h,a])=>[a,h])));add(r)}else if(fmt()==='groups'){let assigned=shuffle([...teams]).map((t,i)=>({...t,group_name:'Group '+(i%current.group_count+1)}));check(await db.from('live_teams').upsert(assigned));for(let i=1;i<=current.group_count;i++){let group='Group '+i;add(rounds(assigned.filter(t=>t.group_name===group).map(t=>t.team_number)),group)}}else throw Error('Unknown format');await insertFixtures(rows);await load(current.id);await advance();await load(current.id);message('Fixtures generated')});
-el('knockoutButton').onclick=()=>action(async()=>{if(!owner()||el('knockoutButton').disabled)return;let ids;if(fmt()==='groups'){let rankings=groupNames().map(g=>ranking(g));ids=[];for(let i=0;i<current.qualifiers_per_group;i++)for(let r of rankings)ids.push(r[i].n)}else ids=ranking().slice(0,current.qualifiers).map(r=>r.n);await insertFixtures(bracket(ids,Math.max(...matches.map(m=>m.match_number))+1));await load(current.id);message('Knockouts generated')});}
-async function start(){try{if(!SUPABASE_URL.startsWith('https://')||SUPABASE_KEY.startsWith('YOUR_'))throw Error('Insert your Supabase URL and publishable key in index.html');db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);wire();db.auth.onAuthStateChange(event=>{if(event==='PASSWORD_RECOVERY'){recovering=true;user=null;render();message('Enter new password')}});let session=check(await db.auth.getSession());user=recovering?null:session.session?.user||null;await list();setInterval(()=>{if(!busy&&!user&&!recovering)action(()=>list(current?.id))},10000)}catch(e){message(e.message)}}start();
+el('createButton').onclick=()=>action(async()=>{if(!user||recovering)return;if(el('customCreate').checked){if(el('format').value==='knockout')throw Error('Custom ranking is not used for knockout');ruleForms.create();}let name=el('competitionName').value.trim(),n=Number(el('teamCount').value),f=el('format').value,g=Number(el('games').value),q=Number(el('qualifiers').value),groups=Number(el('groups').value),per=Number(el('perGroup').value);if(!name||!Number.isInteger(n)||n<4||n>64)throw Error('Enter name and 4–64 teams');if(f==='champions_league'&&(!Number.isInteger(g)||g<1||g>=n||n*g%2||!power(q)||q>n))throw Error('Invalid matches or qualifiers; odd team counts require even matches per team');if(f==='groups'&&(!Number.isInteger(groups)||groups<2||!Number.isInteger(per)||per<1||Math.floor(n/groups)<Math.max(2,per)||!power(groups*per)))throw Error('Groups need at least two teams each and total qualifiers must be a power of two');let c=check(await db.from('live_competitions').insert({name,owner_id:user.id,team_count:n,format:f,games_per_team:f==='champions_league'?g:f==='round_robin'?(n-1)*(el('double').checked?2:1):0,qualifiers:f==='groups'?groups*per:f==='champions_league'?q:f==='knockout'?n:0,group_count:f==='groups'?groups:null,qualifiers_per_group:f==='groups'?per:null,double_round_robin:f==='round_robin'&&el('double').checked,is_public:el('public').checked&&!el('customCreate').checked}).select().single());try{check(await db.from('live_teams').insert(Array.from({length:n},(_,i)=>({competition_id:c.id,team_number:i+1,name:'Team '+String(i+1).padStart(2,'0')}))))}catch(e){check(await db.rpc('manage_live_competition',{p_competition_id:c.id,p_action:'delete',p_confirm:true}));throw e}await list(c.id);if(el('customCreate').checked)await saveRules('create');message('Competition created')});
+el('saveTeams').onclick=()=>action(async()=>{if(!owner()||current.is_archived)return;let rows=teams.map(t=>({...t,name:el('team-'+t.team_number).value.trim()}));if(rows.some(t=>!t.name))throw Error('All teams need names');check(await db.from('live_teams').upsert(rows));await load(current.id);message('Team names saved')});
+el('drawButton').onclick=()=>action(drawNow);
+el('knockoutButton').onclick=()=>action(async()=>{if(!playable()||el('knockoutButton').disabled)return;let ids;if(fmt()==='groups'){let rankings=groupNames().map(g=>ranking(g));ids=[];for(let i=0;i<current.qualifiers_per_group;i++)for(let r of rankings)ids.push(r[i].n)}else ids=ranking().slice(0,current.qualifiers).map(r=>r.n);await insertFixtures(bracket(ids,Math.max(...matches.map(m=>m.match_number))+1));await load(current.id);message('Knockouts generated')});}
+async function start(){try{if(!SUPABASE_URL.startsWith('https://')||!SUPABASE_KEY||SUPABASE_KEY.startsWith('YOUR_'))throw Error('Insert your Supabase URL and publishable key in index.html');db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);wire();rulesForm(el('createRules'),'create');el('createRules').classList.add('hidden');el('customCreate').onchange=()=>{el('createRules').classList.toggle('hidden',!el('customCreate').checked);if(el('customCreate').checked)el('public').checked=false;el('public').disabled=el('customCreate').checked};el('showArchived').onchange=()=>action(()=>list());db.auth.onAuthStateChange(event=>{if(event==='PASSWORD_RECOVERY'){recovering=true;user=null;render();message('Enter new password')}});let session=check(await db.auth.getSession());user=recovering?null:session.session?.user||null;await list(new URLSearchParams(location.search).get('competition'));setInterval(()=>{if(!busy&&!user&&!recovering)action(()=>list(current?.id))},10000)}catch(e){message(e.message)}}
+const playable=()=>owner()&&!current.is_archived&&current.ranking_version!==2;
+async function saveResult(m,h,a){
+ if(!playable())throw Error('Results are locked');
+ if(!Number.isInteger(h)||!Number.isInteger(a)||h<0||a<0)throw Error('Enter valid scores');
+ const id=current.id;let w=null;
+ if(m.stage==='league'){
+ if(matches.some(x=>x.stage!=='league'))throw Error('League results are locked');
+ check(await db.from('live_fixtures').update({home_score:h,away_score:a,winner_team:null}).eq('id',m.id).eq('competition_id',id));await load(id);message('Result saved');return;}
+ if(m.is_bye||!m.home_team||!m.away_team)throw Error('Invalid knockout fixture');
+ if(h===a){let p=prompt('Penalty winner:\n1 for '+name(m.home_team)+'\n2 for '+name(m.away_team));if(!['1','2'].includes(p))return;w=p==='1'?m.home_team:m.away_team}else w=h>a?m.home_team:m.away_team;
+ if(matches.some(x=>x.stage!=='league'&&x.knockout_round==null)){if(m.winner_team&&m.winner_team!==w)throw Error('Changing legacy knockout winners is disabled');check(await db.from('live_fixtures').update({home_score:h,away_score:a,winner_team:w}).eq('id',m.id));await load(id);await advance();await load(id);message('Result saved');return;}
+ if(m.winner_team&&m.winner_team!==w&&!confirm('Change confirmed winner?\nMatch '+m.match_number+'\nPrevious winner: '+name(m.winner_team)+'\nNew winner: '+name(w)+'\nSubsequent fixtures may change.')){await load(id);return;}
+ const params={p_competition_id:id,p_fixture_id:m.id,p_home_score:h,p_away_score:a,p_winner_team:w,p_expected_home_score:m.home_score??null,p_expected_away_score:m.away_score??null,p_expected_winner:m.winner_team??null,p_expected_home_team:m.home_team,p_expected_away_team:m.away_team,p_confirm_reset:false};
+ let result=await db.rpc('save_knockout_result',params);
+ if(result.error&&result.error.message.includes('Confirmation required: downstream results will be reset')){if(!confirm('WARNING: affected downstream scores and winners will be cleared. Continue?')){await load(id);return;}params.p_confirm_reset=true;result=await db.rpc('save_knockout_result',params);}
+ const saved=check(result);await load(id);message('Result saved successfully.\nUpdated downstream fixtures: '+saved.updated_fixtures+'\nReset downstream results: '+saved.reset_results);
+}
+async function list(preferred){let rows=await pages('live_competitions',null,'created_at');rows.reverse();let archived=el('showArchived');archived.parentElement.classList.toggle('hidden',!user);if(!user)archived.checked=false;let wanted=rows.find(c=>c.id===preferred);if(wanted&&wanted.is_archived&&user)archived.checked=true;rows=rows.filter(c=>!!c.is_archived===archived.checked);let s=el('competition');s.replaceChildren();for(let c of rows){let o=node('option',c.name+(c.is_archived?' (Archived)':c.is_public?'':' (Private)'),s);o.value=c.id}let id=rows.some(c=>c.id===preferred)?preferred:rows[0]?.id;if(id)s.value=id;await load(id);}
+const criteria={goal_difference:'Goal difference',goals_scored:'Goals scored',matches_won:'Wins',goals_conceded:'Fewest goals conceded',h2h_points:'Head-to-head points',h2h_goal_difference:'Head-to-head goal difference',h2h_goals_scored:'Head-to-head goals scored'};
+const presets={standard:['goal_difference','goals_scored','matches_won'],head_to_head:['h2h_points','h2h_goal_difference','h2h_goals_scored','goal_difference','goals_scored','matches_won'],defensive:['goals_conceded','goal_difference','goals_scored','matches_won']};
+function field(root,label,type,value,options){let l=node('label',label+' ',root),e=node(type==='select'?'select':'input',null,l);if(type==='select'){for(let [v,t] of options){let o=node('option',t,e);o.value=v}}else e.type=type;if(type==='checkbox')e.checked=!!value;else e.value=value??'';return e;}
+function btn(root,label,fn,disabled=false,danger=false){let b=node('button',label,root);b.type='button';b.disabled=disabled;if(danger)b.className='danger';b.onclick=fn;return b;}
+const ruleForms={};
+function rulesForm(root,key,c={}){root.replaceChildren();let panel=node('div',null,root);panel.className='settings-box';node('h3','Ranking configuration',panel);let win=field(panel,'Win points','number',c.points_win??3),draw=field(panel,'Draw points','number',c.points_draw??1),loss=field(panel,'Loss points','number',c.points_loss??0);let preset=field(panel,'Preset','select',c.ranking_preset||'standard',[['standard','Standard'],['head_to_head','Head-to-head'],['defensive','Defensive'],['custom','Custom']]);let rules=[...(c.ranking_rules||presets.standard)],listRoot=node('div',null,panel);function paint(){listRoot.replaceChildren();node('p','1. Points (fixed)',listRoot);rules.forEach((r,i)=>{let row=node('div',`${i+2}. ${criteria[r]} `,listRoot);btn(row,'Up',()=>{[rules[i-1],rules[i]]=[rules[i],rules[i-1]];preset.value='custom';paint()},i===0);btn(row,'Down',()=>{[rules[i+1],rules[i]]=[rules[i],rules[i+1]];preset.value='custom';paint()},i===rules.length-1);btn(row,'Remove',()=>{rules.splice(i,1);preset.value='custom';paint()},rules.length===1)});let available=Object.keys(criteria).filter(r=>!rules.includes(r));if(available.length){let add=field(listRoot,'Add criterion','select',available[0],available.map(r=>[r,criteria[r]]));btn(listRoot,'Add',()=>{rules.push(add.value);preset.value='custom';paint()})}}preset.onchange=()=>{if(presets[preset.value])rules=[...presets[preset.value]];paint()};paint();let final=field(panel,'Final tie resolution','select',c.final_tiebreak&&c.final_tiebreak!=='legacy_team_number'?c.final_tiebreak:'organiser_decision',[['organiser_decision','Organiser decision'],['drawing_of_lots','Drawing of lots'],['playoff','Play-off'],['shared_position','Shared position']]);let reason=field(panel,'Reason','text',key==='create'?'Initial ranking configuration':'');ruleForms[key]=()=>{let w=Number(win.value),d=Number(draw.value),l=Number(loss.value);if([win,draw,loss].some(e=>e.value==='')||![w,d,l].every(Number.isInteger)||w>100||!(w>d&&d>l&&l>=0)||!reason.value.trim())throw Error('Enter valid points (win > draw > loss) and a reason');return {p_points_win:w,p_points_draw:d,p_points_loss:l,p_ranking_preset:preset.value,p_ranking_rules:rules,p_final_tiebreak:final.value,p_change_reason:reason.value.trim()}};}
+async function saveRules(key){if(!owner()||current.is_archived||fmt()==='knockout')throw Error('Ranking settings unavailable');if(current.is_public)throw Error('Make competition private first');let params=ruleForms[key]();let played=matches.some(m=>m.stage==='league'&&complete(m));if(key!=='create'&&!confirm('Save ranking rules? '+(played?'Existing standings will be recalculated when the new engine is ready. ':'')+'Competition will remain private and play will be locked during development.'))return;check(await db.rpc('save_ranking_settings',{p_competition_id:current.id,...params,p_confirm_change:played}));await list(current.id);message('Ranking settings saved. Standings engine pending.');}
+async function manage(actionName,nameValue=null,confirmed=false){let id=current.id;check(await db.rpc('manage_live_competition',{p_competition_id:id,p_action:actionName,p_name:nameValue,p_confirm:confirmed}));if(actionName==='archive')el('showArchived').checked=true;if(actionName==='restore')el('showArchived').checked=false;await list(actionName==='delete'?null:id);message('Competition '+actionName.replaceAll('_',' ')+' completed');}
+function structural(root){root.replaceChildren();let c=current;let n=field(root,'Teams','number',c.team_count),f=field(root,'Format','select',c.format,[['champions_league','Champions League'],['groups','Groups and knockouts'],['round_robin','Round-robin'],['knockout','Straight knockout']]),g=field(root,'Matches per team','number',c.games_per_team||4),q=field(root,'Qualifiers','number',c.qualifiers||8),gc=field(root,'Groups','number',c.group_count||2),per=field(root,'Qualifiers per group','number',c.qualifiers_per_group||2),dbl=field(root,'Double round-robin','checkbox',c.double_round_robin),rem=node('div',null,root);let boxes=[];function refresh(){for(let [e,show] of [[g,f.value==='champions_league'],[q,f.value==='champions_league'],[gc,f.value==='groups'],[per,f.value==='groups'],[dbl,f.value==='round_robin']])e.parentElement.classList.toggle('hidden',!show);rem.replaceChildren();boxes=[];if(Number(n.value)<teams.length){node('p','Select exactly '+(teams.length-Number(n.value))+' teams to remove',rem);for(let t of teams)boxes.push([t.team_number,field(rem,t.name,'checkbox',false)])}}n.oninput=refresh;f.onchange=refresh;refresh();btn(root,'Save settings',()=>action(async()=>{let count=Number(n.value),remove=boxes.filter(x=>x[1].checked).map(x=>x[0]);if(!Number.isInteger(count)||count<4||count>64||remove.length!==Math.max(0,teams.length-count))throw Error('Check team count and removal selection');if(c.ranking_version===2&&f.value==='knockout')throw Error('Custom ranking competitions cannot switch to knockout yet');if(!confirm('Save structural settings for '+c.name+'?'+(remove.length?' Selected teams will be permanently removed.':'')))return;check(await db.rpc('edit_live_competition',{p_competition_id:c.id,p_name:c.name,p_team_count:count,p_format:f.value,p_games_per_team:Number(g.value),p_qualifiers:Number(q.value),p_group_count:Number(gc.value),p_qualifiers_per_group:Number(per.value),p_double_round_robin:dbl.checked,p_remove_teams:remove,p_confirm:true}));await list(c.id);message('Settings saved')}));}
+function renderManagement(){let root=el('managementTools');root.replaceChildren();if(!owner())return;let c=current,arch=c.is_archived;let grid=node('div',null,root);grid.className='management-grid';let panel=node('div',null,root);let add=(label,fn,disabled=false,danger=false)=>btn(grid,label,()=>action(fn),disabled,danger);let confirmText=()=>c.name+'\n'+teams.length+' teams, '+matches.filter(m=>!m.is_bye).length+' fixtures';if(!arch){add('Rename',async()=>{let n=prompt('New competition name',c.name);if(n?.trim())await manage('rename',n.trim())});add('Edit settings',async()=>structural(panel),!!matches.length);add('Ranking rules',async()=>{panel.replaceChildren();rulesForm(panel,'edit',c);btn(panel,'Save ranking rules',()=>action(()=>saveRules('edit')))},fmt()==='knockout'||c.is_public||matches.some(m=>m.stage!=='league'));add(c.is_public?'Make private':'Publish',async()=>{if(confirm((c.is_public?'Make private?':'Publish competition?')+'\n'+c.name))await manage(c.is_public?'make_private':'publish')},!c.is_public&&c.ranking_version===2);add('Share link',async()=>{let url=new URL(location.pathname,location.origin);url.searchParams.set('competition',c.id);prompt('Copy public competition link',url.href)},!c.is_public);add('Archive',async()=>{if(confirm('Archive and make private?\n'+confirmText()))await manage('archive',null,true)});for(let [label,op,warning,disabled] of [['Reset all results','reset_results','Clear all scores and dependent knockout results.',!matches.length],['Delete and redraw fixtures','redraw_fixtures','Delete all fixtures and results. A fresh draw will follow.',!matches.length||c.ranking_version===2],['Reset knockout stages','reset_knockouts','Delete knockout fixtures; retain league results.',!['groups','champions_league'].includes(fmt())||!matches.some(m=>m.stage!=='league')]])add(label,async()=>{if(!confirm(warning+'\n'+confirmText()))return;check(await db.rpc('reset_live_competition',{p_competition_id:c.id,p_action:op,p_confirm:true}));await load(c.id);if(op==='redraw_fixtures'){message('Fixtures deleted. Generating fresh draw.');await drawNow()}else message('Reset completed')},disabled,true);}else add('Restore as private',async()=>{if(confirm('Restore '+c.name+' as private?'))await manage('restore')});add('Duplicate',async()=>{let n=prompt('Name for private copy',c.name+' - Copy');if(n===null)return;let r=check(await db.rpc('duplicate_live_competition',{p_competition_id:c.id,p_new_name:n.trim()||null}));el('showArchived').checked=false;await list(r.new_competition_id);message('Competition duplicated')});add('Delete competition',async()=>{if(confirm('PERMANENTLY DELETE\n'+confirmText()+'\nAll teams, fixtures, results and audit records will be deleted.'))await manage('delete',null,true)},false,true);}
+function render(){renderBase();renderManagement();let locked=current?.ranking_version===2,arch=current?.is_archived;el('teamEditor').classList.toggle('hidden',!!arch);el('saveTeams').disabled=!!arch;el('drawButton').disabled=el('drawButton').disabled||!playable();el('knockoutButton').disabled=el('knockoutButton').disabled||!playable();if(locked){el('standings').replaceChildren();node('p','Custom ranking engine pending. Standings and qualification are temporarily unavailable.',el('standings'));el('champion').textContent='';}if(arch)el('summary').textContent+=' | Archived';}
+
+async function drawNow(){if(!playable()||matches.length)return;if(teams.length!==current.team_count)throw Error('Team count mismatch');let ids=teams.map(t=>t.team_number),rows=[],number=1;let add=(rs,group=null)=>rs.forEach((pairs,i)=>pairs.forEach(([h,a])=>rows.push({competition_id:current.id,match_number:number++,matchday:i+1,stage:'league',home_team:h,away_team:a,group_name:group})));if(fmt()==='knockout')rows=bracket(shuffle(ids),1);else if(fmt()==='champions_league')add(leagueDraw(ids,current.games_per_team));else if(fmt()==='round_robin'){let r=rounds(shuffle(ids));if(current.double_round_robin)r=r.concat(r.map(p=>p.map(([h,a])=>[a,h])));add(r)}else if(fmt()==='groups'){let assigned=shuffle([...teams]).map((t,i)=>({...t,group_name:'Group '+(i%current.group_count+1)}));check(await db.from('live_teams').upsert(assigned));for(let i=1;i<=current.group_count;i++){let group='Group '+i;add(rounds(assigned.filter(t=>t.group_name===group).map(t=>t.team_number)),group)}}else throw Error('Unknown format');await insertFixtures(rows);await load(current.id);await advance();await load(current.id);message('Fixtures generated')}
+
+start();
 </script></body></html>
