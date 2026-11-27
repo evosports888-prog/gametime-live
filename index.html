@@ -100,7 +100,170 @@ async function advance() {
             Object.assign(m, updates);
         }
     }
-}async function saveResult(m,h,a){if(!owner())return;let w=null;if(m.stage!=='league'){if(h===a){let p=prompt('Penalty winner: 1 for '+name(m.home_team)+' or 2 for '+name(m.away_team));if(!['1','2'].includes(p))return;w=p==='1'?m.home_team:m.away_team}else w=h>a?m.home_team:m.away_team;if(m.winner_team&&m.winner_team!==w)throw Error('Changing confirmed knockout winners is disabled')}let id=current.id;check(await db.from('live_fixtures').update({home_score:h,away_score:a,winner_team:w}).eq('id',m.id));await load(id);await advance();await load(id);message('Result saved')}
+
+async function saveResult(m,h,a) {
+    if (!owner()) return;
+
+    if (!Number.isInteger(h) ||
+        !Number.isInteger(a) ||
+        h < 0 || a < 0) {
+        throw Error('Enter valid scores');
+    }
+
+    let id = current.id;
+    let w = null;
+
+    // League results retain existing behaviour.
+    if (m.stage === 'league') {
+        if (matches.some(x => x.stage !== 'league')) {
+            throw Error('League results are locked');
+        }
+
+        check(await db.from('live_fixtures')
+            .update({
+                home_score: h,
+                away_score: a,
+                winner_team: null
+            })
+            .eq('id', m.id)
+            .eq('competition_id', id));
+
+        await load(id);
+        message('Result saved');
+        return;
+    }
+
+    // Validate knockout participants.
+    if (m.is_bye || !m.home_team || !m.away_team) {
+        throw Error('Invalid knockout fixture');
+    }
+
+    // Determine the winning team.
+    if (h === a) {
+        let p = prompt(
+            'Penalty winner:\n1 for ' +
+            name(m.home_team) +
+            '\n2 for ' +
+            name(m.away_team)
+        );
+
+        if (!['1', '2'].includes(p)) return;
+
+        w = p === '1' ? m.home_team : m.away_team;
+    } else {
+        w = h > a ? m.home_team : m.away_team;
+    }
+
+    // Preserve legacy knockout compatibility.
+    const legacy = matches.some(
+        x => x.stage !== 'league' &&
+        x.knockout_round == null
+    );
+
+    if (legacy) {
+        if (m.winner_team && m.winner_team !== w) {
+            throw Error(
+                'Changing legacy knockout winners is disabled'
+            );
+        }
+
+        check(await db.from('live_fixtures')
+            .update({
+                home_score: h,
+                away_score: a,
+                winner_team: w
+            })
+            .eq('id', m.id)
+            .eq('competition_id', id));
+
+        await load(id);
+        await advance();
+        await load(id);
+        message('Result saved');
+        return;
+    }
+
+    // Confirm changes to an existing winner.
+    if (m.winner_team && m.winner_team !== w) {
+        const confirmed = confirm(
+            'Change confirmed winner?\n\n' +
+            'Match ' + m.match_number + '\n' +
+            'Previous winner: ' +
+            name(m.winner_team) + '\n' +
+            'New winner: ' + name(w) + '\n\n' +
+            'Subsequent knockout fixtures may change.'
+        );
+
+        if (!confirmed) {
+            await load(id);
+            message('Correction cancelled');
+            return;
+        }
+    }
+
+    // Prepare secure database function parameters.
+    const params = {
+        p_competition_id: id,
+        p_fixture_id: m.id,
+        p_home_score: h,
+        p_away_score: a,
+        p_winner_team: w,
+        p_expected_home_score: m.home_score ?? null,
+        p_expected_away_score: m.away_score ?? null,
+        p_expected_winner: m.winner_team ?? null,
+        p_expected_home_team: m.home_team,
+        p_expected_away_team: m.away_team,
+        p_confirm_reset: false
+    };
+
+    // Attempt atomic result update.
+    let result = await db.rpc(
+        'save_knockout_result',
+        params
+    );
+
+    // Request additional confirmation if played
+    // downstream fixtures must be reset.
+    if (result.error &&
+        result.error.message.includes(
+            'Confirmation required: downstream results will be reset'
+        )) {
+
+        const confirmed = confirm(
+            'WARNING: Downstream results will be reset.\n\n' +
+            'Changing this winner will invalidate ' +
+            'one or more subsequent knockout results.\n\n' +
+            'Affected scores and winners will be cleared. ' +
+            'Unaffected fixtures will be preserved.\n\n' +
+            'Do you wish to continue?'
+        );
+
+        if (!confirmed) {
+            await load(id);
+            message('Correction cancelled. Results unchanged.');
+            return;
+        }
+
+        params.p_confirm_reset = true;
+
+        result = await db.rpc(
+            'save_knockout_result',
+            params
+        );
+    }
+
+    const saved = check(result);
+
+    await load(id);
+
+    message(
+        'Result saved successfully.\n' +
+        'Updated downstream fixtures: ' +
+        saved.updated_fixtures + '\n' +
+        'Reset downstream results: ' +
+        saved.reset_results
+    );
+}
 function wire(){el('competition').onchange=()=>action(()=>load(el('competition').value));el('loginButton').onclick=()=>action(async()=>{user=check(await db.auth.signInWithPassword({email:el('email').value.trim(),password:el('password').value})).user;el('password').value='';await list(current?.id);message('Logged in')});el('logoutButton').onclick=()=>action(async()=>{check(await db.auth.signOut());user=null;await list(current?.id);message('Logged out')});el('forgotButton').onclick=()=>action(async()=>{if(!el('email').value.trim())throw Error('Enter email first');check(await db.auth.resetPasswordForEmail(el('email').value.trim(),{redirectTo:location.origin}));message('Recovery email sent')});el('resetButton').onclick=()=>action(async()=>{if(!recovering)throw Error('Open a valid recovery link');let p=el('newPassword').value;if(p.length<8||p!==el('confirmPassword').value)throw Error('Passwords must match and contain at least 8 characters');check(await db.auth.updateUser({password:p}));check(await db.auth.signOut());recovering=false;user=null;await list();message('Password changed. Log in again')});
 el('createButton').onclick=()=>action(async()=>{if(!user||recovering)return;let name=el('competitionName').value.trim(),n=Number(el('teamCount').value),f=el('format').value,g=Number(el('games').value),q=Number(el('qualifiers').value),groups=Number(el('groups').value),per=Number(el('perGroup').value);if(!name||!Number.isInteger(n)||n<4||n>64)throw Error('Enter name and 4–64 teams');if(f==='champions_league'&&(!Number.isInteger(g)||g<1||g>=n||n*g%2||!power(q)||q>n))throw Error('Invalid matches or qualifiers; odd team counts require even matches per team');if(f==='groups'&&(!Number.isInteger(groups)||groups<2||!Number.isInteger(per)||per<1||Math.floor(n/groups)<Math.max(2,per)||!power(groups*per)))throw Error('Groups need at least two teams each and total qualifiers must be a power of two');let c=check(await db.from('live_competitions').insert({name,owner_id:user.id,team_count:n,format:f,games_per_team:f==='champions_league'?g:f==='round_robin'?(n-1)*(el('double').checked?2:1):0,qualifiers:f==='groups'?groups*per:f==='champions_league'?q:f==='knockout'?n:0,group_count:f==='groups'?groups:null,qualifiers_per_group:f==='groups'?per:null,double_round_robin:f==='round_robin'&&el('double').checked,is_public:el('public').checked}).select().single());try{check(await db.from('live_teams').insert(Array.from({length:n},(_,i)=>({competition_id:c.id,team_number:i+1,name:'Team '+String(i+1).padStart(2,'0')}))))}catch(e){await db.from('live_competitions').delete().eq('id',c.id);throw e}await list(c.id);message('Competition created')});
 el('saveTeams').onclick=()=>action(async()=>{if(!owner())return;let rows=teams.map(t=>({...t,name:el('team-'+t.team_number).value.trim()}));if(rows.some(t=>!t.name))throw Error('All teams need names');check(await db.from('live_teams').upsert(rows));await load(current.id);message('Team names saved')});
