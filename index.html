@@ -98,8 +98,10 @@ async function advance() {
                 .eq('id', m.id));
 
             Object.assign(m, updates);
-        }
-    }
+}
+}
+}
+async function saveResult(m,h,a) {
 
 async function saveResult(m,h,a) {
     if (!owner()) return;
