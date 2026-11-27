@@ -20,8 +20,51 @@ async function list(preferred){let rows=await pages('live_competitions',null,'cr
 function fields(){let f=el('format').value;for(let [id,show] of [['gamesLabel',f==='champions_league'],['qualLabel',f==='champions_league'],['groupLabel',f==='groups'],['perLabel',f==='groups'],['doubleLabel',f==='round_robin']])el(id).classList.toggle('hidden',!show)}el('format').onchange=fields;fields();
 function bracket(ids,start){let size=2**Math.ceil(Math.log2(ids.length)),order=[1,2];while(order.length<size){let s=order.length*2+1;order=order.flatMap(x=>[x,s-x])}let slots=order.map(i=>ids[i-1]??null),rows=[],previous=[],num=start;for(let r=1;slots.length>1||previous.length>1;r++){let count=r===1?slots.length/2:previous.length/2,next=[];for(let i=0;i<count;i++){let h=r===1?slots[i*2]:null,a=r===1?slots[i*2+1]:null,bye=r===1&&(!h||!a);let stage=count===1?'final':count===2?'semi-final':count===4?'quarter-final':'round-of-'+count*2;let m={competition_id:current.id,match_number:num++,stage,knockout_round:r,home_team:h,away_team:a,home_source_match:r===1?null:previous[i*2],away_source_match:r===1?null:previous[i*2+1],is_bye:bye,winner_team:bye?h||a:null};rows.push(m);next.push(m.match_number)}previous=next;slots=[]}return rows}
 async function insertFixtures(rows){check(await db.from('live_fixtures').insert(rows))}
-async function advance(){let map=new Map(matches.map(m=>[m.match_number,m]));for(let m of matches.filter(m=>m.stage!=='league')){let sources=[m.home_source_match,m.away_source_match];if(!sources[0]&&!sources[1]&&current.team_count===26&&current.qualifiers===8){sources=({57:[53,54],58:[55,56],59:[57,58]})[m.match_number]||sources}let h=map.get(sources[0])?.winner_team,a=map.get(sources[1])?.winner_team;if(h&&a&&!m.home_team&&!m.away_team){check(await db.from('live_fixtures').update({home_team:h,away_team:a}).eq('id',m.id));m.home_team=h;m.away_team=a}}}
-async function saveResult(m,h,a){if(!owner())return;let w=null;if(m.stage!=='league'){if(h===a){let p=prompt('Penalty winner: 1 for '+name(m.home_team)+' or 2 for '+name(m.away_team));if(!['1','2'].includes(p))return;w=p==='1'?m.home_team:m.away_team}else w=h>a?m.home_team:m.away_team;if(m.winner_team&&m.winner_team!==w)throw Error('Changing confirmed knockout winners is disabled')}let id=current.id;check(await db.from('live_fixtures').update({home_score:h,away_score:a,winner_team:w}).eq('id',m.id));await load(id);await advance();await load(id);message('Result saved')}
+async function advance() {
+    if (!owner()) return;
+
+    let map = new Map(
+        matches.map(m => [m.match_number, m])
+    );
+
+    for (let m of matches.filter(m => m.stage !== 'league')) {
+        let sources = [
+            m.home_source_match,
+            m.away_source_match
+        ];
+
+        if (!sources[0] && !sources[1] &&
+            current.team_count === 26 &&
+            current.qualifiers === 8) {
+            sources = ({
+                57: [53, 54],
+                58: [55, 56],
+                59: [57, 58]
+            })[m.match_number] || sources;
+        }
+
+        let h = map.get(sources[0])?.winner_team;
+        let a = map.get(sources[1])?.winner_team;
+
+        let updates = {};
+
+        if (h && m.home_team == null) {
+            updates.home_team = h;
+        }
+
+        if (a && m.away_team == null) {
+            updates.away_team = a;
+        }
+
+        if (Object.keys(updates).length) {
+            check(await db.from('live_fixtures')
+                .update(updates)
+                .eq('id', m.id));
+
+            Object.assign(m, updates);
+        }
+    }
+}async function saveResult(m,h,a){if(!owner())return;let w=null;if(m.stage!=='league'){if(h===a){let p=prompt('Penalty winner: 1 for '+name(m.home_team)+' or 2 for '+name(m.away_team));if(!['1','2'].includes(p))return;w=p==='1'?m.home_team:m.away_team}else w=h>a?m.home_team:m.away_team;if(m.winner_team&&m.winner_team!==w)throw Error('Changing confirmed knockout winners is disabled')}let id=current.id;check(await db.from('live_fixtures').update({home_score:h,away_score:a,winner_team:w}).eq('id',m.id));await load(id);await advance();await load(id);message('Result saved')}
 function wire(){el('competition').onchange=()=>action(()=>load(el('competition').value));el('loginButton').onclick=()=>action(async()=>{user=check(await db.auth.signInWithPassword({email:el('email').value.trim(),password:el('password').value})).user;el('password').value='';await list(current?.id);message('Logged in')});el('logoutButton').onclick=()=>action(async()=>{check(await db.auth.signOut());user=null;await list(current?.id);message('Logged out')});el('forgotButton').onclick=()=>action(async()=>{if(!el('email').value.trim())throw Error('Enter email first');check(await db.auth.resetPasswordForEmail(el('email').value.trim(),{redirectTo:location.origin}));message('Recovery email sent')});el('resetButton').onclick=()=>action(async()=>{if(!recovering)throw Error('Open a valid recovery link');let p=el('newPassword').value;if(p.length<8||p!==el('confirmPassword').value)throw Error('Passwords must match and contain at least 8 characters');check(await db.auth.updateUser({password:p}));check(await db.auth.signOut());recovering=false;user=null;await list();message('Password changed. Log in again')});
 el('createButton').onclick=()=>action(async()=>{if(!user||recovering)return;let name=el('competitionName').value.trim(),n=Number(el('teamCount').value),f=el('format').value,g=Number(el('games').value),q=Number(el('qualifiers').value),groups=Number(el('groups').value),per=Number(el('perGroup').value);if(!name||!Number.isInteger(n)||n<4||n>64)throw Error('Enter name and 4–64 teams');if(f==='champions_league'&&(!Number.isInteger(g)||g<1||g>=n||n*g%2||!power(q)||q>n))throw Error('Invalid matches or qualifiers; odd team counts require even matches per team');if(f==='groups'&&(!Number.isInteger(groups)||groups<2||!Number.isInteger(per)||per<1||Math.floor(n/groups)<Math.max(2,per)||!power(groups*per)))throw Error('Groups need at least two teams each and total qualifiers must be a power of two');let c=check(await db.from('live_competitions').insert({name,owner_id:user.id,team_count:n,format:f,games_per_team:f==='champions_league'?g:f==='round_robin'?(n-1)*(el('double').checked?2:1):0,qualifiers:f==='groups'?groups*per:f==='champions_league'?q:f==='knockout'?n:0,group_count:f==='groups'?groups:null,qualifiers_per_group:f==='groups'?per:null,double_round_robin:f==='round_robin'&&el('double').checked,is_public:el('public').checked}).select().single());try{check(await db.from('live_teams').insert(Array.from({length:n},(_,i)=>({competition_id:c.id,team_number:i+1,name:'Team '+String(i+1).padStart(2,'0')}))))}catch(e){await db.from('live_competitions').delete().eq('id',c.id);throw e}await list(c.id);message('Competition created')});
 el('saveTeams').onclick=()=>action(async()=>{if(!owner())return;let rows=teams.map(t=>({...t,name:el('team-'+t.team_number).value.trim()}));if(rows.some(t=>!t.name))throw Error('All teams need names');check(await db.from('live_teams').upsert(rows));await load(current.id);message('Team names saved')});
