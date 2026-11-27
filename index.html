@@ -15,8 +15,44 @@ function renderStandings(){let root=el('standings');root.replaceChildren();for(l
 function renderMatch(m,root){let row=node('div',null,root);row.className='fixture';node('div',`Match ${m.match_number} | ${name(m.home_team)} vs ${name(m.away_team)}`,row);if(m.is_bye)node('p','Bye — automatic progression',row);else if(owner()&&m.home_team&&m.away_team&&!(m.stage==='league'&&matches.some(x=>x.stage!=='league'))){let h=node('input',null,row),a=node('input',null,row);for(let x of [h,a]){x.type='number';x.min=0;x.step=1;x.className='score'}h.value=m.home_score??'';a.value=m.away_score??'';let b=node('button','Save result',row);b.onclick=()=>action(async()=>{let x=Number(h.value),y=Number(a.value);if(h.value===''||a.value===''||!Number.isInteger(x)||!Number.isInteger(y)||x<0||y<0)throw Error('Enter valid scores');await saveResult(m,x,y)})}else node('p',complete(m)?`${m.home_score} – ${m.away_score}`:'Awaiting result',row);if(m.winner_team)node('p','Winner: '+name(m.winner_team),row)}
 function render(){for(let [id,hide] of [['admin',!owner()],['createPanel',!user||recovering],['login',!!user||recovering],['logoutButton',!user||recovering],['resetPanel',!recovering],['tableSection',fmt()==='knockout'],['leagueSection',fmt()==='knockout']])el(id).classList.toggle('hidden',hide);el('summary').textContent=current?`${current.name} | ${current.team_count} teams | ${matches.filter(m=>!m.is_bye).length} fixtures | ${current.is_public?'Public':'Private'}`:'';renderStandings();let editor=el('teamEditor');editor.replaceChildren();if(owner())for(let t of teams){let l=node('label',`${t.team_number}${t.group_name?' · '+t.group_name:''} `,editor);let i=node('input',null,l);i.id='team-'+t.team_number;i.value=t.name}let league=el('fixtures'),ko=el('knockouts');league.replaceChildren();ko.replaceChildren();let last='';for(let m of matches.filter(m=>m.stage==='league').sort((a,b)=>a.matchday-b.matchday||a.match_number-b.match_number)){let title='Matchday '+m.matchday;if(title!==last){node('h3',title,league);last=title}renderMatch(m,league)}last='';for(let m of matches.filter(m=>m.stage!=='league')){if(m.stage!==last){node('h3',m.stage.toUpperCase(),ko);last=m.stage}renderMatch(m,ko)}let final=matches.find(m=>m.stage==='final');el('champion').textContent=final?.winner_team?'🏆 CHAMPION: '+name(final.winner_team):fmt()==='round_robin'&&matches.length&&matches.every(complete)?'League winner: '+name(ranking()[0].n):'';el('drawButton').disabled=!owner()||!!matches.length;el('knockoutButton').disabled=!owner()||!['groups','champions_league'].includes(fmt())||!matches.length||matches.some(m=>m.stage!=='league'||!complete(m));}
 async function pages(table,filter,order){let all=[];for(let i=0;;i+=500){let q=db.from(table).select('*');if(filter)q=q.eq('competition_id',filter);let part=check(await q.order(order).range(i,i+499));all.push(...part);if(part.length<500)return all}}
-async function load(id){current=null;teams=[];matches=[];if(id){current=check(await db.from('live_competitions').select('*').eq('id',id).single());teams=await pages('live_teams',id,'team_number');matches=await pages('live_fixtures',id,'match_number')}render()}
-async function list(preferred){let rows=await pages('live_competitions',null,'created_at');rows.reverse();let s=el('competition');s.replaceChildren();for(let c of rows){let o=node('option',c.name+(c.is_public?'':' (Private)'),s);o.value=c.id}let id=rows.some(c=>c.id===preferred)?preferred:rows[0]?.id;if(id)s.value=id;await load(id)}
+let loadVersion = 0;
+
+async function load(id) {
+    const version = ++loadVersion;
+
+    let nextCurrent = null;
+    let nextTeams = [];
+    let nextMatches = [];
+
+    if (id) {
+        nextCurrent = check(await db
+            .from('live_competitions')
+            .select('*')
+            .eq('id', id)
+            .single());
+
+        nextTeams = await pages(
+            'live_teams', id, 'team_number'
+        );
+
+        nextMatches = await pages(
+            'live_fixtures', id, 'match_number'
+        );
+    }
+
+    if (version !== loadVersion) return;
+
+    current = nextCurrent;
+    teams = nextTeams;
+
+    matches = [...new Map(
+        nextMatches.map(m => [m.id, m])
+    ).values()].sort(
+        (a, b) => a.match_number - b.match_number
+    );
+
+    render();
+}async function list(preferred){let rows=await pages('live_competitions',null,'created_at');rows.reverse();let s=el('competition');s.replaceChildren();for(let c of rows){let o=node('option',c.name+(c.is_public?'':' (Private)'),s);o.value=c.id}let id=rows.some(c=>c.id===preferred)?preferred:rows[0]?.id;if(id)s.value=id;await load(id)}
 function fields(){let f=el('format').value;for(let [id,show] of [['gamesLabel',f==='champions_league'],['qualLabel',f==='champions_league'],['groupLabel',f==='groups'],['perLabel',f==='groups'],['doubleLabel',f==='round_robin']])el(id).classList.toggle('hidden',!show)}el('format').onchange=fields;fields();
 function bracket(ids,start){let size=2**Math.ceil(Math.log2(ids.length)),order=[1,2];while(order.length<size){let s=order.length*2+1;order=order.flatMap(x=>[x,s-x])}let slots=order.map(i=>ids[i-1]??null),rows=[],previous=[],num=start;for(let r=1;slots.length>1||previous.length>1;r++){let count=r===1?slots.length/2:previous.length/2,next=[];for(let i=0;i<count;i++){let h=r===1?slots[i*2]:null,a=r===1?slots[i*2+1]:null,bye=r===1&&(!h||!a);let stage=count===1?'final':count===2?'semi-final':count===4?'quarter-final':'round-of-'+count*2;let m={competition_id:current.id,match_number:num++,stage,knockout_round:r,home_team:h,away_team:a,home_source_match:r===1?null:previous[i*2],away_source_match:r===1?null:previous[i*2+1],is_bye:bye,winner_team:bye?h||a:null};rows.push(m);next.push(m.match_number)}previous=next;slots=[]}return rows}
 async function insertFixtures(rows){check(await db.from('live_fixtures').insert(rows))}
