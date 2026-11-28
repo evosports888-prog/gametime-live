@@ -23,16 +23,32 @@ function ranking(group){
  if(!custom)return rows.sort((a,b)=>b.pts-a.pts||(b.gf-b.ga)-(a.gf-a.ga)||b.gf-a.gf||b.w-a.w||a.n-b.n).map((r,i)=>({...r,pos:i+1,tied:false}));
  const values={points:r=>r.pts,goal_difference:r=>r.gf-r.ga,goals_scored:r=>r.gf,matches_won:r=>r.w,goals_conceded:r=>-r.ga};
  const criteria=['points',...(current.ranking_rules||[])];
- let out=[];
- function resolve(bucket,i){
-  if(bucket.length===1||i===criteria.length||!values[criteria[i]]){
-   const pos=out.length+1,tied=bucket.length>1;
-   for(const r of bucket.sort((a,b)=>a.n-b.n))out.push({...r,pos,tied,pending:tied&&i<criteria.length});return;
+ const isH2H=k=>k.startsWith('h2h_');
+ function mini(bucket){
+  const ids=new Set(bucket.map(r=>r.n)), stats=new Map(bucket.map(r=>[r.n,{pts:0,gf:0,ga:0}])), pairs=new Map();
+  for(const m of matches){if(m.stage!=='league'||!ids.has(m.home_team)||!ids.has(m.away_team))continue;
+   const key=[m.home_team,m.away_team].sort((a,b)=>a-b).join(':');
+   if(!pairs.has(key))pairs.set(key,[]);pairs.get(key).push(m);
   }
-  const value=values[criteria[i]], groups=new Map();
-  for(const r of bucket){const k=value(r);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);}
-  for(const k of [...groups.keys()].sort((a,b)=>b-a))resolve(groups.get(k),i+1);
+  const expected=current.double_round_robin&&current.format==='round_robin'?2:1;
+  if(pairs.size!==bucket.length*(bucket.length-1)/2||[...pairs.values()].some(ms=>ms.length!==expected||ms.some(m=>!complete(m))))return null;
+  for(const ms of pairs.values())for(const m of ms){const h=stats.get(m.home_team),a=stats.get(m.away_team);h.gf+=m.home_score;h.ga+=m.away_score;a.gf+=m.away_score;a.ga+=m.home_score;h.pts+=m.home_score>m.away_score?win:m.home_score===m.away_score?draw:loss;a.pts+=m.away_score>m.home_score?win:m.home_score===m.away_score?draw:loss;}
+  return stats;
  }
+ let out=[];
+ function resolve(bucket,i,context=null,blockStart=i){
+  if(bucket.length===1||i===criteria.length){const pos=out.length+1,tied=bucket.length>1;for(const r of bucket.sort((a,b)=>a.n-b.n))out.push({...r,pos,tied,pending:false});return;}
+  const k=criteria[i];let value;
+  if(isH2H(k)){
+   if(!context){context=mini(bucket);blockStart=i;}
+   if(!context){let next=i+1;while(next<criteria.length&&isH2H(criteria[next]))next++;resolve(bucket,next);return;}
+   value=r=>{const m=context.get(r.n);return k==='h2h_points'?m.pts:k==='h2h_goal_difference'?m.gf-m.ga:m.gf;};
+  }else value=values[k];
+  if(!value){resolve(bucket,i+1);return;}
+  const groups=new Map();for(const r of bucket){const v=value(r);if(!groups.has(v))groups.set(v,[]);groups.get(v).push(r);}
+  for(const v of [...groups.keys()].sort((a,b)=>b-a)){const sub=groups.get(v);if(isH2H(k)&&groups.size>1&&sub.length>1)resolve(sub,blockStart);else if(isH2H(k)&&i+1<criteria.length&&isH2H(criteria[i+1]))resolve(sub,i+1,context,blockStart);else resolve(sub,i+1);}
+ }
+
  if(rows.length)resolve(rows,0);return out;
 }
 function node(tag,text,parent){let e=document.createElement(tag);if(text!=null)e.textContent=text;if(parent)parent.append(e);return e}
@@ -76,66 +92,13 @@ function field(root,label,type,value,options){let l=node('label',label+' ',root)
 function btn(root,label,fn,disabled=false,danger=false){let b=node('button',label,root);b.type='button';b.disabled=disabled;if(danger)b.className='danger';b.onclick=fn;return b;}
 const ruleForms={};
 function rulesForm(root,key,c={}){root.replaceChildren();let panel=node('div',null,root);panel.className='settings-box';node('h3','Ranking configuration',panel);let win=field(panel,'Win points','number',c.points_win??3),draw=field(panel,'Draw points','number',c.points_draw??1),loss=field(panel,'Loss points','number',c.points_loss??0);let preset=field(panel,'Preset','select',c.ranking_preset||'standard',[['standard','Standard'],['head_to_head','Head-to-head'],['defensive','Defensive'],['custom','Custom']]);let rules=[...(c.ranking_rules||presets.standard)],listRoot=node('div',null,panel);function paint(){listRoot.replaceChildren();node('p','1. Points (fixed)',listRoot);rules.forEach((r,i)=>{let row=node('div',`${i+2}. ${criteria[r]} `,listRoot);btn(row,'Up',()=>{[rules[i-1],rules[i]]=[rules[i],rules[i-1]];preset.value='custom';paint()},i===0);btn(row,'Down',()=>{[rules[i+1],rules[i]]=[rules[i],rules[i+1]];preset.value='custom';paint()},i===rules.length-1);btn(row,'Remove',()=>{rules.splice(i,1);preset.value='custom';paint()},rules.length===1)});let available=Object.keys(criteria).filter(r=>!rules.includes(r));if(available.length){let add=field(listRoot,'Add criterion','select',available[0],available.map(r=>[r,criteria[r]]));btn(listRoot,'Add',()=>{rules.push(add.value);preset.value='custom';paint()})}}preset.onchange=()=>{if(presets[preset.value])rules=[...presets[preset.value]];paint()};paint();let final=field(panel,'Final tie resolution','select',c.final_tiebreak&&c.final_tiebreak!=='legacy_team_number'?c.final_tiebreak:'organiser_decision',[['organiser_decision','Organiser decision'],['drawing_of_lots','Drawing of lots'],['playoff','Play-off'],['shared_position','Shared position']]);let reason=field(panel,'Reason','text',key==='create'?'Initial ranking configuration':'');ruleForms[key]=()=>{let w=Number(win.value),d=Number(draw.value),l=Number(loss.value);if([win,draw,loss].some(e=>e.value==='')||![w,d,l].every(Number.isInteger)||w>100||!(w>d&&d>l&&l>=0)||!reason.value.trim())throw Error('Enter valid points (win > draw > loss) and a reason');return {p_points_win:w,p_points_draw:d,p_points_loss:l,p_ranking_preset:preset.value,p_ranking_rules:rules,p_final_tiebreak:final.value,p_change_reason:reason.value.trim()}};}
-async function saveRules(key){if(!owner()||current.is_archived||fmt()==='knockout')throw Error('Ranking settings unavailable');if(current.is_public)throw Error('Make competition private first');let params=ruleForms[key]();let played=matches.some(m=>m.stage==='league'&&complete(m));if(key!=='create'&&!confirm('Save ranking rules? '+(played?'Existing standings will be recalculated when the new engine is ready. ':'')+'Competition will remain private and play will be locked during development.'))return;check(await db.rpc('save_ranking_settings',{p_competition_id:current.id,...params,p_confirm_change:played}));await list(current.id);message('Ranking settings saved. Standings engine pending.');}
+async function saveRules(key){if(!owner()||current.is_archived||fmt()==='knockout')throw Error('Ranking settings unavailable');if(current.is_public)throw Error('Make competition private first');let params=ruleForms[key]();let played=matches.some(m=>m.stage==='league'&&complete(m));if(key!=='create'&&!confirm('Save ranking rules? '+(played?'Existing standings will be recalculated. ':'')+'Competition will remain private and play will be locked during development.'))return;check(await db.rpc('save_ranking_settings',{p_competition_id:current.id,...params,p_confirm_change:played}));await list(current.id);message('Ranking settings saved. Standings recalculated.');}
 async function manage(actionName,nameValue=null,confirmed=false){let id=current.id;check(await db.rpc('manage_live_competition',{p_competition_id:id,p_action:actionName,p_name:nameValue,p_confirm:confirmed}));if(actionName==='archive')el('showArchived').checked=true;if(actionName==='restore')el('showArchived').checked=false;await list(actionName==='delete'?null:id);message('Competition '+actionName.replaceAll('_',' ')+' completed');}
 function structural(root){root.replaceChildren();let c=current;let n=field(root,'Teams','number',c.team_count),f=field(root,'Format','select',c.format,[['champions_league','Champions League'],['groups','Groups and knockouts'],['round_robin','Round-robin'],['knockout','Straight knockout']]),g=field(root,'Matches per team','number',c.games_per_team||4),q=field(root,'Qualifiers','number',c.qualifiers||8),gc=field(root,'Groups','number',c.group_count||2),per=field(root,'Qualifiers per group','number',c.qualifiers_per_group||2),dbl=field(root,'Double round-robin','checkbox',c.double_round_robin),rem=node('div',null,root);let boxes=[];function refresh(){for(let [e,show] of [[g,f.value==='champions_league'],[q,f.value==='champions_league'],[gc,f.value==='groups'],[per,f.value==='groups'],[dbl,f.value==='round_robin']])e.parentElement.classList.toggle('hidden',!show);rem.replaceChildren();boxes=[];if(Number(n.value)<teams.length){node('p','Select exactly '+(teams.length-Number(n.value))+' teams to remove',rem);for(let t of teams)boxes.push([t.team_number,field(rem,t.name,'checkbox',false)])}}n.oninput=refresh;f.onchange=refresh;refresh();btn(root,'Save settings',()=>action(async()=>{let count=Number(n.value),remove=boxes.filter(x=>x[1].checked).map(x=>x[0]);if(!Number.isInteger(count)||count<4||count>64||remove.length!==Math.max(0,teams.length-count))throw Error('Check team count and removal selection');if(c.ranking_version===2&&f.value==='knockout')throw Error('Custom ranking competitions cannot switch to knockout yet');if(!confirm('Save structural settings for '+c.name+'?'+(remove.length?' Selected teams will be permanently removed.':'')))return;check(await db.rpc('edit_live_competition',{p_competition_id:c.id,p_name:c.name,p_team_count:count,p_format:f.value,p_games_per_team:Number(g.value),p_qualifiers:Number(q.value),p_group_count:Number(gc.value),p_qualifiers_per_group:Number(per.value),p_double_round_robin:dbl.checked,p_remove_teams:remove,p_confirm:true}));await list(c.id);message('Settings saved')}));}
 function renderManagement(){let root=el('managementTools');root.replaceChildren();if(!owner())return;let c=current,arch=c.is_archived;let grid=node('div',null,root);grid.className='management-grid';let panel=node('div',null,root);let add=(label,fn,disabled=false,danger=false)=>btn(grid,label,()=>action(fn),disabled,danger);let confirmText=()=>c.name+'\n'+teams.length+' teams, '+matches.filter(m=>!m.is_bye).length+' fixtures';if(!arch){add('Rename',async()=>{let n=prompt('New competition name',c.name);if(n?.trim())await manage('rename',n.trim())});add('Edit settings',async()=>structural(panel),!!matches.length);add('Ranking rules',async()=>{panel.replaceChildren();rulesForm(panel,'edit',c);btn(panel,'Save ranking rules',()=>action(()=>saveRules('edit')))},fmt()==='knockout'||c.is_public||matches.some(m=>m.stage!=='league'));add(c.is_public?'Make private':'Publish',async()=>{if(confirm((c.is_public?'Make private?':'Publish competition?')+'\n'+c.name))await manage(c.is_public?'make_private':'publish')},!c.is_public&&c.ranking_version===2);add('Share link',async()=>{let url=new URL(location.pathname,location.origin);url.searchParams.set('competition',c.id);prompt('Copy public competition link',url.href)},!c.is_public);add('Archive',async()=>{if(confirm('Archive and make private?\n'+confirmText()))await manage('archive',null,true)});for(let [label,op,warning,disabled] of [['Reset all results','reset_results','Clear all scores and dependent knockout results.',!matches.length],['Delete and redraw fixtures','redraw_fixtures','Delete all fixtures and results. A fresh draw will follow.',!matches.length||c.ranking_version===2],['Reset knockout stages','reset_knockouts','Delete knockout fixtures; retain league results.',!['groups','champions_league'].includes(fmt())||!matches.some(m=>m.stage!=='league')]])add(label,async()=>{if(!confirm(warning+'\n'+confirmText()))return;check(await db.rpc('reset_live_competition',{p_competition_id:c.id,p_action:op,p_confirm:true}));await load(c.id);if(op==='redraw_fixtures'){message('Fixtures deleted. Generating fresh draw.');await drawNow()}else message('Reset completed')},disabled,true);}else add('Restore as private',async()=>{if(confirm('Restore '+c.name+' as private?'))await manage('restore')});add('Duplicate',async()=>{let n=prompt('Name for private copy',c.name+' - Copy');if(n===null)return;let r=check(await db.rpc('duplicate_live_competition',{p_competition_id:c.id,p_new_name:n.trim()||null}));el('showArchived').checked=false;await list(r.new_competition_id);message('Competition duplicated')});add('Delete competition',async()=>{if(confirm('PERMANENTLY DELETE\n'+confirmText()+'\nAll teams, fixtures, results and audit records will be deleted.'))await manage('delete',null,true)},false,true);}
-function render(){renderBase();renderManagement();let locked=current?.ranking_version===2,arch=current?.is_archived;el('teamEditor').classList.toggle('hidden',!!arch);el('saveTeams').disabled=!!arch;el('drawButton').disabled=el('drawButton').disabled||!playable();el('knockoutButton').disabled=el('knockoutButton').disabled||!playable()||locked;if(locked){node('p','Provisional standings: '+current.points_win+'/'+current.points_draw+'/'+current.points_loss+' points (win/draw/loss). Equal positions are unresolved; head-to-head and final tie resolution are pending. Qualification and publication remain locked.',el('standings'));el('champion').textContent='';}if(arch)el('summary').textContent+=' | Archived';}
-async function drawNow(){
-    if(!playable()||matches.length)return;
-    if(teams.length!==current.team_count)
-        throw Error('Team count mismatch');
+function render(){renderBase();renderManagement();let locked=current?.ranking_version===2,arch=current?.is_archived;el('teamEditor').classList.toggle('hidden',!!arch);el('saveTeams').disabled=!!arch;el('drawButton').disabled=el('drawButton').disabled||!playable();el('knockoutButton').disabled=el('knockoutButton').disabled||!playable()||locked;if(locked){node('p','Provisional standings: '+current.points_win+'/'+current.points_draw+'/'+current.points_loss+' points (win/draw/loss). Equal positions are unresolved; final tie resolution is pending; incomplete head-to-head meetings are skipped. Qualification and publication remain locked.',el('standings'));el('champion').textContent='';}if(arch)el('summary').textContent+=' | Archived';}
 
-    let ids=teams.map(t=>t.team_number),
-        rows=[],number=1;
-
-    let add=(rs,group=null)=>rs.forEach(
-        (pairs,i)=>pairs.forEach(([h,a])=>rows.push({
-            competition_id:current.id,
-            match_number:number++,
-            matchday:i+1,
-            stage:'league',
-            home_team:h,
-            away_team:a,
-            group_name:group
-        }))
-    );
-
-    if(fmt()==='knockout'){
-        rows=bracket(shuffle(ids),1);
-    }else if(fmt()==='champions_league'){
-        add(leagueDraw(ids,current.games_per_team));
-    }else if(fmt()==='round_robin'){
-        let r=rounds(shuffle(ids));
-        if(current.double_round_robin)
-            r=r.concat(r.map(p=>p.map(([h,a])=>[a,h])));
-        add(r);
-    }else if(fmt()==='groups'){
-        let assigned=shuffle([...teams]).map((t,i)=>({
-            ...t,
-            group_name:'Group '+(i%current.group_count+1)
-        }));
-
-        check(await db.from('live_teams').upsert(assigned));
-
-        for(let i=1;i<=current.group_count;i++){
-            let group='Group '+i;
-            add(rounds(assigned.filter(
-                t=>t.group_name===group
-            ).map(t=>t.team_number)),group);
-        }
-    }else{
-        throw Error('Unknown format');
-    }
-
-    await insertFixtures(rows);
-    await load(current.id);
-    await advance();
-    await load(current.id);
-    message('Fixtures generated');
-}
+async function drawNow(){if(!playable()||matches.length)return;if(teams.length!==current.team_count)throw Error('Team count mismatch');let ids=teams.map(t=>t.team_number),rows=[],number=1;let add=(rs,group=null)=>rs.forEach((pairs,i)=>pairs.forEach(([h,a])=>rows.push({competition_id:current.id,match_number:number++,matchday:i+1,stage:'league',home_team:h,away_team:a,group_name:group})));if(fmt()==='knockout')rows=bracket(shuffle(ids),1);else if(fmt()==='champions_league')add(leagueDraw(ids,current.games_per_team));else if(fmt()==='round_robin'){let r=rounds(shuffle(ids));if(current.double_round_robin)r=r.concat(r.map(p=>p.map(([h,a])=>[a,h])));add(r)}else if(fmt()==='groups'){let assigned=shuffle([...teams]).map((t,i)=>({...t,group_name:'Group '+(i%current.group_count+1)}));check(await db.from('live_teams').upsert(assigned));for(let i=1;i<=current.group_count;i++){let group='Group '+i;add(rounds(assigned.filter(t=>t.group_name===group).map(t=>t.team_number)),group)}}else throw Error('Unknown format');await insertFixtures(rows);await load(current.id);await advance();await load(current.id);message('Fixtures generated')}
 
 start();
-</script>
-</body>
-</html>
+</script></body></html>
